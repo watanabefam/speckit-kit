@@ -1,0 +1,245 @@
+#!/usr/bin/env bash
+# speckit-init — set up GitHub Spec Kit (Spec-Driven Development) in a repo,
+# wired for opencode + Freebuff/Codebuff.
+#
+# Usage:
+#   speckit-init [options] [path]      # path defaults to the current directory
+#   speckit-init --help
+#
+# Options:
+#   --with-bug            also install the bundled `bug` extension
+#   --with-assess         also install the bundled `assess` extension
+#   --seed-constitution   seed .specify/memory/constitution.md from
+#                         constitution/principles.md (overwrites the seeded file)
+#
+# What it does:
+#   1. Ensures the `specify` CLI is installed
+#   2. `specify init --here` with the opencode integration
+#   3. Installs this repo's preset (append strategy) so spec/plan/tasks templates
+#      gain the traceability + verification sections
+#   4. Installs the agent-context extension, pointed at AGENTS.md
+#   5. Injects a short routing block into AGENTS.md
+#
+# Safe to re-run: the preset is replaced in place and the AGENTS.md block is
+# rewritten between its own markers, never duplicated.
+set -euo pipefail
+
+BRIDGE_START="<!-- SPECKIT-BRIDGE START -->"
+BRIDGE_END="<!-- SPECKIT-BRIDGE END -->"
+PRESET_ID="spec-driven-development"
+SPECKIT_PKG="specify-cli"
+
+usage() { sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//'; }
+
+WITH_BUG=false
+WITH_ASSESS=false
+SEED_CONSTITUTION=false
+TARGET=""
+for arg in "$@"; do
+  case "$arg" in
+    --with-bug)          WITH_BUG=true ;;
+    --with-assess)       WITH_ASSESS=true ;;
+    --seed-constitution) SEED_CONSTITUTION=true ;;
+    --help|-h)           usage; exit 0 ;;
+    -*)                  echo "error: unknown option '$arg'" >&2; exit 1 ;;
+    *)                   TARGET="$arg" ;;
+  esac
+done
+TARGET="${TARGET:-.}"
+
+[[ -d "$TARGET" ]] || { echo "error: '$TARGET' is not a directory" >&2; exit 1; }
+ROOT="$(cd "$TARGET" && pwd)"
+
+# Resolve this script through any symlink so we can find the kit repo it lives in.
+SELF="$(python3 -c 'import os,sys;print(os.path.realpath(sys.argv[1]))' "$0" 2>/dev/null || echo "$0")"
+KIT_ROOT="$(cd "$(dirname "$SELF")/.." && pwd)"
+PRESET_DIR="$KIT_ROOT/preset"
+
+say()  { printf '\033[1;36m::\033[0m %s\n' "$*"; }
+warn() { printf '\033[1;33m!!\033[0m %s\n' "$*" >&2; }
+die()  { printf '\033[1;31mxx\033[0m %s\n' "$*" >&2; exit 1; }
+
+# --- 1. CLI -------------------------------------------------------------------
+if ! command -v specify >/dev/null 2>&1; then
+  say "specify CLI not found — installing"
+  command -v uv >/dev/null 2>&1 || die "need uv (https://docs.astral.sh/uv/) to install ${SPECKIT_PKG}"
+  uv tool install "$SPECKIT_PKG"
+else
+  say "specify CLI v$(specify version 2>/dev/null | grep -oE 'CLI Version +[0-9][0-9.]*' | grep -oE '[0-9][0-9.]*' | head -1 || true)"
+fi
+
+# --- 2. Project scaffolding ---------------------------------------------------
+if [[ -d "$ROOT/.specify" ]]; then
+  say ".specify/ already present — re-running init to refresh"
+else
+  if [[ -n "$(git -C "$ROOT" status --porcelain 2>/dev/null || true)" ]]; then
+    warn "uncommitted changes in $ROOT — commit or stash first so the diff is reviewable"
+  fi
+  ( cd "$ROOT" && specify init --here --force --non-interactive --ignore-agent-tools \
+      --integration opencode --script sh ) >/dev/null
+  say "scaffolded .specify/ + .opencode/commands/"
+fi
+
+cd "$ROOT"
+
+# --- 3. Preset (append-style template addenda) --------------------------------
+if [[ -d "$PRESET_DIR" ]]; then
+  PLIST="$(specify preset list 2>/dev/null || true)"
+  if grep -q "$PRESET_ID" <<<"$PLIST"; then
+    # `preset add` refuses to reinstall an installed id, so remove first.
+    specify preset remove "$PRESET_ID" >/dev/null 2>&1 || true
+  fi
+  if specify preset add --dev "$PRESET_DIR" >/dev/null 2>&1; then
+    say "installed preset: $PRESET_ID (template addenda, append strategy)"
+  else
+    warn "could not install preset — retry: specify preset add --dev \"$PRESET_DIR\""
+  fi
+else
+  warn "preset directory not found at $PRESET_DIR — skipping (template addenda not applied)"
+fi
+
+# --- 4. agent-context extension, pointed at AGENTS.md -------------------------
+# NOTE: capture to a var first. Piping a verbose `specify` command straight into
+# `grep -q` makes grep exit early on a match, killing the producer with EPIPE —
+# and under `set -o pipefail` that non-zero status would be read as "not found".
+EXT_LIST="$(specify extension list 2>/dev/null || true)"
+if grep -q 'agent-context' <<<"$EXT_LIST"; then
+  say "agent-context extension already installed"
+elif specify extension add agent-context >/dev/null 2>&1; then
+  say "installed agent-context extension"
+else
+  warn "could not install agent-context extension — retry: specify extension add agent-context"
+fi
+
+CFG=".specify/extensions/agent-context/agent-context-config.yml"
+if [[ -f "$CFG" ]]; then
+  # Point the extension at AGENTS.md — the anchor BOTH opencode and Freebuff read.
+  # Idempotency is handled inside the python block.
+  if python3 - "$CFG" <<'PY'
+import re, sys
+p = sys.argv[1]
+s = open(p).read()
+if re.search(r'(?m)^[ \t]*-[ \t]*AGENTS\.md[ \t]*$', s):
+    sys.exit(0)                      # already anchored
+new = re.sub(r'(?m)^context_files:[ \t]*(\[\s*\])?[ \t]*$',
+             'context_files:\n  - AGENTS.md', s)
+if new == s:
+    print("could not locate a context_files key to patch", file=sys.stderr)
+    sys.exit(1)
+open(p, 'w').write(new)
+PY
+  then
+    say "agent context anchored to AGENTS.md"
+  else
+    warn "could not anchor agent context to AGENTS.md — set context_files in $CFG by hand"
+  fi
+fi
+
+# --- 5. Optional bundled extensions -------------------------------------------
+for pair in "bug:$WITH_BUG" "assess:$WITH_ASSESS"; do
+  name="${pair%%:*}"; want="${pair##*:}"
+  $want || continue
+  ELIST="$(specify extension list 2>/dev/null || true)"
+  if grep -q "$name" <<<"$ELIST"; then
+    say "$name extension already installed"
+  elif specify extension add "$name" >/dev/null 2>&1; then
+    say "installed $name extension"
+  else
+    warn "could not install $name extension — retry: specify extension add $name"
+  fi
+done
+
+# --- 6. Optional constitution seed --------------------------------------------
+if $SEED_CONSTITUTION; then
+  SRC="$KIT_ROOT/constitution/principles.md"
+  DEST="$ROOT/.specify/memory/constitution.md"
+  if [[ -f "$SRC" && -f "$DEST" ]]; then
+    cp "$DEST" "$DEST.pre-seed.bak"
+    cp "$SRC" "$DEST"
+    say "seeded constitution from constitution/principles.md (previous kept as constitution.md.pre-seed.bak)"
+  else
+    warn "could not seed constitution (missing $SRC or $DEST)"
+  fi
+fi
+
+# --- 7. AGENTS.md routing block ------------------------------------------------
+# Deliberately short. The methodology lives in the `spec-driven-development`
+# skill; this block only routes to it and gives command paths for agents that
+# cannot invoke /speckit.* commands.
+read -r -d '' BRIDGE <<'BRIDGE_EOF' || true
+# Spec-Driven Development (Spec Kit)
+
+This project uses Spec Kit. Requirements are written down before code is written, and the
+artifacts under `specs/` are the source of truth.
+
+**Load the `spec-driven-development` skill before specifying, planning, or implementing.**
+It carries the workflow, approval gates, traceability and verification rules.
+
+## If you cannot invoke `/speckit.*` commands
+
+Agents that do not read `.opencode/commands/` (e.g. Freebuff/Codebuff) can run each step by
+reading the command prompt directly and following it as instructions:
+
+| Step | File |
+| --- | --- |
+| constitution | `.opencode/commands/speckit.constitution.md` |
+| specify | `.opencode/commands/speckit.specify.md` |
+| plan | `.opencode/commands/speckit.plan.md` |
+| tasks | `.opencode/commands/speckit.tasks.md` |
+| implement | `.opencode/commands/speckit.implement.md` |
+| converge | `.opencode/commands/speckit.converge.md` |
+| clarify | `.opencode/commands/speckit.clarify.md` |
+| analyze | `.opencode/commands/speckit.analyze.md` |
+| checklist | `.opencode/commands/speckit.checklist.md` |
+
+Substitute the user's feature description wherever the prompt expects `$ARGUMENTS`.
+BRIDGE_EOF
+
+AGENTS="$ROOT/AGENTS.md"
+if [[ -f "$AGENTS" ]] && ! grep -qF "$BRIDGE_START" "$AGENTS" && [[ -s "$AGENTS" ]]; then
+  cp "$AGENTS" "$AGENTS.pre-speckit.bak"
+  say "backed up existing AGENTS.md -> AGENTS.md.pre-speckit.bak (diff it, then delete or gitignore)"
+fi
+
+python3 - "$AGENTS" "$BRIDGE_START" "$BRIDGE_END" <<PY
+import sys
+path, start, end = sys.argv[1], sys.argv[2], sys.argv[3]
+body = """${BRIDGE}"""
+old = open(path).read() if __import__('os').path.exists(path) else ""
+new_block = start + "\n" + body + "\n" + end + "\n"
+if start in old and end in old:
+    pre = old.split(start)[0]
+    post = old.split(end, 1)[1]
+    out = pre + new_block + post.lstrip("\n")
+    if old.endswith("\n") and not out.endswith("\n"):
+        out += "\n"
+else:
+    out = (old.rstrip("\n") + "\n\n" if old.strip() else "") + new_block
+open(path, "w").write(out)
+PY
+say "AGENTS.md routing block installed"
+
+# --- 8. Let the extension seed its managed block ------------------------------
+bash .specify/extensions/agent-context/scripts/bash/update-agent-context.sh >/dev/null 2>&1 || true
+
+# --- Done ---------------------------------------------------------------------
+cmds=$(ls -1 .opencode/commands/*.md 2>/dev/null | wc -l | tr -d ' ')
+presets=$(ls -1 .specify/presets 2>/dev/null | wc -l | tr -d ' ')
+say "done — $cmds commands, $presets preset(s) in $ROOT"
+cat <<EOF
+
+Next steps:
+  1. Review the changes:  git status && git diff
+  2. Open this folder in opencode or Freebuff
+  3. Check the composition:  specify preset resolve spec-template
+  4. Start the loop (opencode):
+       /speckit.constitution
+       /speckit.specify
+       /speckit.plan
+       /speckit.tasks
+       /speckit.implement
+       /speckit.converge
+
+  In Freebuff, ask it to follow the spec-driven-development skill.
+  Optional extensions: --with-bug  --with-assess
+EOF

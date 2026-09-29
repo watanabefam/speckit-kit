@@ -1,0 +1,8 @@
+# macOS
+.DS_Store
+
+# Backups written by speckit-init when a project already has an AGENTS.md
+*.pre-speckit.bak
+
+# Spec Kit catalog cache is machine-local (also ignored inside .specify/)
+.specify/extensions/.cache/
