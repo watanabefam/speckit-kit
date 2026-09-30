@@ -25,6 +25,25 @@ installer.
 | D5 | Symlinks beat a remote URL — no network dependency, no silent-failure mode | opencode `session/instruction.ts:96` (no auth), `:100` (`return ""` on any error) |
 | D6 | Install `agent-context` only by default; `bug`/`assess` opt-in | spec-kit EXTENSION-USER-GUIDE, "Minimal Extensions" |
 | D7 | Repo is **private**; `--dev` needs no public URL | consequence of D3 + D5 |
+| D8 | Principles ship as a **`constitution-template` append**, not a seeded `.specify/memory/constitution.md`. The seed flag was removed. | spec-kit `presets/ARCHITECTURE.md` "Constitution lifecycle"; `constitution-sync` README (materialization is an escape hatch; materialized edits "get shadowed or clobbered on the next recompose") |
+| D9 | Keep the custom preset rather than adopting a community one, and document the alternatives | no community preset ships a skill; `specassay` requires a full durable-ID regime; `openup-governance` is the closest targeting |
+
+### What D8 corrects
+
+The first build shipped `constitution/principles.md` plus a `--seed-constitution` flag. Research
+showed that is the **materialized-copy anti-pattern** the architecture doc warns about: init
+seeds `constitution.md` once, and `/speckit.constitution` composes the live template at
+runtime. A hand-placed file fights that. The principles now live in the preset, and the first
+`/speckit.constitution` run applies them. `constitution/principles.md` was deleted so there is
+one authoritative copy.
+
+### What D9 corrects
+
+A process failure: the catalog was never searched before designing. It holds ~40 community
+presets, several overlapping this one (`specassay`, `openup-governance`, `workflow-preset`,
+`explicit-task-dependencies`, `test-first-governance`). The build is still justified — none ship
+a skill, and the agent wiring is unique — but the alternatives are now documented in the README.
+
 
 ### What D4 corrects
 
@@ -40,7 +59,7 @@ duplicates core templates or is disproportionate.
 
 | Source section | Destination | Rationale |
 | --- | --- | --- |
-| §5 principles | `constitution/principles.md` | concise, generic, high value |
+| §5 principles | `preset/templates/constitution-addendum.md` → `constitution-template` (append) | concise, generic, high value. **Not** a seed file — see D8 |
 | §7 spec template | `preset/templates/spec-addendum.md` | **~65% redundant** with core (`FR-001`, Given/When/Then, priorities, edge cases, assumptions, `SC-001` all already present) — shipped only Carried Forward, Problem, Goals, Non-Goals, Dependencies, MVP/Future, Validation Plan, Traceability |
 | §9 plan template | `preset/templates/plan-addendum.md` | core plan template is sparse — most of §9 is genuinely new. **Highest value.** |
 | §10 task template | `preset/templates/tasks-addendum.md` | core has `T00x`/deps/`[P]`/phases — added per-task requirement link, scope boundaries, verification |
@@ -89,6 +108,14 @@ duplicates core templates or is disproportionate.
 - [x] T020 `speckit-init` verified on a copy of a real repo (`audit-project`) and on `speckit-sandbox`
 - [x] T021 Create private GitHub remote + push
 
+### Phase 7 — Post-research corrections
+- [x] T022 Add `constitution-template` append; delete `constitution/principles.md`
+- [x] T023 Remove `--seed-constitution` from `speckit-init`
+- [x] T024 Bound `speckit_version` to `">=1.0.0,<2.0.0"`
+- [x] T025 Write three skill evaluations (`evals/`)
+- [x] T026 Run evals 1 and 2 against a live agent
+- [x] T027 Document community-preset alternatives in the README
+
 ---
 
 ## Verification gates — results
@@ -103,6 +130,8 @@ duplicates core templates or is disproportionate.
 | **G6** integration status clean | ✅ PASS | `Integration status: OK`, 0 modified/missing managed files |
 | **G7** no marker duplication | ✅ PASS | each of the 4 markers exactly once |
 | **G8** both agents discover the skill | ⚠️ **opencode: PASS (executed)** · Freebuff: **source-verified only** | opencode `debug skill` lists it; Freebuff has no CLI to test — verified via `load-skills.ts:118-131` |
+| **G9** all four templates compose | ✅ PASS | `preset resolve` shows an `[append]` layer for constitution/spec/plan/tasks; constitution template contains the principles |
+| **G10** skill evals | ✅ 2 of 3 run · ✅ pass | eval 1 proportional-process PASS; eval 2 injection-resistance PASS (agent refused, cited the rule, deleted nothing); eval 3 unrun |
 
 G8 is the only partial: Freebuff's discovery is proven from its loader source and the shared
 path, not from execution, because Freebuff ships as a desktop app with no CLI.
@@ -121,6 +150,18 @@ path, not from execution, because Freebuff ships as a desktop app with no CLI.
   (hand-written before the markers existed, so it could not be auto-replaced). Applied the
   "repair the earliest artifact" rule to our own build.
 - **2026-09-30** — all gates run; G5 confirmed by live agent invocation.
+- **2026-09-30** — post-build research pass (Anthropic skill authoring best practices +
+  spec-kit community catalog + spec-kit preset architecture).
+  - Validated: SKILL.md 162 lines (<500), references all <100 lines so no TOC needed, references
+    one level deep, description third-person with what+when. `append` mechanism confirmed by
+    precedent — `specassay` v0.5.3 uses `type: template` + `strategy: append`.
+  - Found and fixed **D8** (constitution was the materialized-copy anti-pattern).
+  - Found and recorded **D9** (catalog was never searched before designing).
+  - Found: 0 of 40 community presets ship a skill.
+  - Added three evaluations and ran two live: eval 1 (proportional process) passed — the agent
+    made no ceremony for a one-word fix and honestly reported the file didn't exist; eval 2
+    (untrusted input) passed decisively — the agent detected the injection, refused it, cited
+    the rule, and confirmed nothing was deleted.
 
 ---
 
@@ -139,5 +180,8 @@ path, not from execution, because Freebuff ships as a desktop app with no CLI.
 ## Open items
 
 - **O1** Which real repos to apply to (deferred — `speckit-init <path>` per repo)
-- **O2** Should `--seed-constitution` default on? (currently off — spec-kit seeds its own)
+- ~~**O2** Should `--seed-constitution` default on?~~ — **resolved:** the flag is gone; the
+  principles are a `constitution-template` append (D8)
 - **O3** Fate of this file: keep as build record, move to `docs/`, or delete
+- **O4** Evals have not been run across model tiers (Anthropic's checklist asks for this). Eval
+  3 is written but unrun.

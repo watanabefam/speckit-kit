@@ -9,14 +9,13 @@
 # Options:
 #   --with-bug            also install the bundled `bug` extension
 #   --with-assess         also install the bundled `assess` extension
-#   --seed-constitution   seed .specify/memory/constitution.md from
-#                         constitution/principles.md (overwrites the seeded file)
 #
 # What it does:
 #   1. Ensures the `specify` CLI is installed
 #   2. `specify init --here` with the opencode integration
-#   3. Installs this repo's preset (append strategy) so spec/plan/tasks templates
-#      gain the traceability + verification sections
+#   3. Installs this repo's preset (append strategy) so the constitution, spec,
+#      plan and tasks templates gain the delivery principles, traceability and
+#      verification sections
 #   4. Installs the agent-context extension, pointed at AGENTS.md
 #   5. Injects a short routing block into AGENTS.md
 #
@@ -29,17 +28,15 @@ BRIDGE_END="<!-- SPECKIT-BRIDGE END -->"
 PRESET_ID="spec-driven-development"
 SPECKIT_PKG="specify-cli"
 
-usage() { sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,23p' "$0" | sed 's/^# \{0,1\}//'; }
 
 WITH_BUG=false
 WITH_ASSESS=false
-SEED_CONSTITUTION=false
 TARGET=""
 for arg in "$@"; do
   case "$arg" in
     --with-bug)          WITH_BUG=true ;;
     --with-assess)       WITH_ASSESS=true ;;
-    --seed-constitution) SEED_CONSTITUTION=true ;;
     --help|-h)           usage; exit 0 ;;
     -*)                  echo "error: unknown option '$arg'" >&2; exit 1 ;;
     *)                   TARGET="$arg" ;;
@@ -149,20 +146,7 @@ for pair in "bug:$WITH_BUG" "assess:$WITH_ASSESS"; do
   fi
 done
 
-# --- 6. Optional constitution seed --------------------------------------------
-if $SEED_CONSTITUTION; then
-  SRC="$KIT_ROOT/constitution/principles.md"
-  DEST="$ROOT/.specify/memory/constitution.md"
-  if [[ -f "$SRC" && -f "$DEST" ]]; then
-    cp "$DEST" "$DEST.pre-seed.bak"
-    cp "$SRC" "$DEST"
-    say "seeded constitution from constitution/principles.md (previous kept as constitution.md.pre-seed.bak)"
-  else
-    warn "could not seed constitution (missing $SRC or $DEST)"
-  fi
-fi
-
-# --- 7. AGENTS.md routing block ------------------------------------------------
+# --- 6. AGENTS.md routing block ------------------------------------------------
 # Deliberately short. The methodology lives in the `spec-driven-development`
 # skill; this block only routes to it and gives command paths for agents that
 # cannot invoke /speckit.* commands.

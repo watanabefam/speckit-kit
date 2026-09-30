@@ -10,10 +10,18 @@ preset:
   license: "MIT"
 
 requires:
-  speckit_version: ">=1.0.0"
+  # Bounded above as well as below: spec-kit is pre-2.0 and the append targets
+  # (spec/plan/tasks/constitution templates) are core template names.
+  speckit_version: ">=1.0.0,<2.0.0"
 
 provides:
   templates:
+    - type: "template"
+      name: "constitution-template"
+      file: "templates/constitution-addendum.md"
+      description: "Appends eight delivery principles to the constitution template"
+      strategy: "append"
+
     - type: "template"
       name: "spec-template"
       file: "templates/spec-addendum.md"
