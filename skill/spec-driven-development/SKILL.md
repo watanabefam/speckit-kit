@@ -1,6 +1,6 @@
 ---
 name: spec-driven-development
-description: Spec-driven development workflow for Spec Kit projects. Use when a repository has a .specify/ directory and the work involves writing or revising a specification, planning a feature, generating implementation tasks, implementing an approved plan, verifying delivered work, or assessing whether an idea is worth building. Covers selecting a workflow proportional to risk, approval gates, requirement traceability, handoff discipline, contradiction repair, scope control, and evidence-based completion.
+description: Spec-driven development for repositories that use Spec Kit (they contain a .specify/ directory). Use for any software change in such a repository - new features, bug fixes, refactors, migrations, maintenance, dependency and documentation updates - and when deciding how much process a request warrants. Also use when assessing whether an idea is worth building. Covers workflow selection proportional to risk, approval gates, requirement traceability, handoff discipline, contradiction repair, scope control, and evidence-based completion.
 license: MIT
 metadata:
   category: development

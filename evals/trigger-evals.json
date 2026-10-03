@@ -1,0 +1,128 @@
+{
+  "_comment": "Trigger-accuracy evals. Per Anthropic, a skill that misfires just silently doesn't run, so trigger rate is the primary quality metric. Target: >=90% on should_trigger. The should_not_trigger set is deliberately made of NEAR-MISSES that share keywords or concepts with the skill but need something else - obviously irrelevant queries prove nothing.",
+  "skill": "spec-driven-development",
+  "contexts": {
+    "spec-kit": "a repository that HAS a .specify/ directory (the skill's stated precondition)",
+    "plain": "a repository with NO .specify/ directory"
+  },
+  "should_trigger": [
+    {
+      "id": "st-01",
+      "context": "spec-kit",
+      "query": "Add CSV export to the reports page, with date filters and column selection."
+    },
+    {
+      "id": "st-02",
+      "context": "spec-kit",
+      "query": "The auth token refresh is broken - it fails whenever a token expires mid-session. Fix it."
+    },
+    {
+      "id": "st-03",
+      "context": "spec-kit",
+      "query": "I want to add SSO. Start from the beginning."
+    },
+    {
+      "id": "st-04",
+      "context": "spec-kit",
+      "query": "can u add dark mode to the settings page"
+    },
+    {
+      "id": "st-05",
+      "context": "spec-kit",
+      "query": "Is a mobile app actually worth building for this? Here's the idea: offline-first notes synced to the web."
+    },
+    {
+      "id": "st-06",
+      "context": "spec-kit",
+      "query": "Refactor the payment module onto the new provider API."
+    },
+    {
+      "id": "st-07",
+      "context": "spec-kit",
+      "query": "write a spec for team invitations"
+    },
+    {
+      "id": "st-08",
+      "context": "spec-kit",
+      "query": "The build got a lot slower after the last release. Figure out why and fix it."
+    },
+    {
+      "id": "st-09",
+      "context": "spec-kit",
+      "query": "We need notifications. Multiple channels, per-user preferences, retries - the works."
+    },
+    {
+      "id": "st-10",
+      "context": "spec-kit",
+      "query": "Plan out a migration from the old schema to the new one."
+    },
+    {
+      "id": "st-11",
+      "context": "spec-kit",
+      "query": "Rename the `spec` variable to `specification` across the parser module.",
+      "why_trigger": "Reclassified from should-not-trigger. A trivial edit is still software work in a .specify/ repo, and the skill's job in SKILL.md 1 is to CLASSIFY the request - it should load, recognise this as a trivial one-step change, and say so. A negative case that says 'do not load on trivial edits' contradicts the skill's design."
+    }
+  ],
+  "should_not_trigger": [
+    {
+      "id": "snt-01",
+      "context": "plain",
+      "query": "write a spec for the login flow",
+      "why": "shares the word 'spec' and the exact intent, but the repo has no .specify/ - the precondition is absent"
+    },
+    {
+      "id": "snt-02",
+      "context": "plain",
+      "query": "Fix the typo in the README: 'recieve' should be 'receive'.",
+      "why": "trivial one-step edit in a non-spec-kit repo; Claude can do it directly"
+    },
+    {
+      "id": "snt-03",
+      "context": "spec-kit",
+      "query": "Write a blog post about spec-driven development.",
+      "why": "contains the skill's exact name but is content writing, not the workflow"
+    },
+    {
+      "id": "snt-04",
+      "context": "spec-kit",
+      "query": "Explain what Spec Kit is and how the .specify directory works.",
+      "why": "explanation request, no work to do - the skill is a workflow, not a reference"
+    },
+    {
+      "id": "snt-05",
+      "context": "plain",
+      "query": "Plan my week - five meetings and a Friday deadline.",
+      "why": "'plan' keyword, entirely unrelated domain"
+    },
+    {
+      "id": "snt-06",
+      "context": "plain",
+      "query": "Generate a task list for the sprint from the Jira board.",
+      "why": "'tasks' keyword and a task-list artifact, but there is no spec and no .specify/"
+    },
+    {
+      "id": "snt-07",
+      "context": "spec-kit",
+      "query": "Read specs/001-faq-block/spec.md and summarise it for me in three bullet points.",
+      "why": "mentions specs/ and sits in a spec-kit repo, but it is a read-and-summarise request with no change to make - there is no workflow to run"
+    },
+    {
+      "id": "snt-08",
+      "context": "plain",
+      "query": "Spec out the API response shape for this endpoint.",
+      "why": "'spec out' collides directly with 'specify', but it is a quick design question with no repo workflow"
+    },
+    {
+      "id": "snt-09",
+      "context": "plain",
+      "query": "Should I use Postgres or SQLite for this side project?",
+      "why": "'should I' + a build decision, but no repository and no workflow to run"
+    },
+    {
+      "id": "snt-10",
+      "context": "spec-kit",
+      "query": "What's the weather in Tokyo tomorrow?",
+      "why": "control case - if this triggers, the description is far too broad"
+    }
+  ]
+}

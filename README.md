@@ -15,7 +15,8 @@ using Spec Kit's own extension points rather than forking it.
 | `skill/spec-driven-development/` | **Agent skill** (agentskills.io) | Carries the methodology via progressive disclosure — ~100 tokens until triggered |
 | `global/working-agreements.md` | Global agent rules | Routing only (~25 lines): "this project uses Spec Kit, load the skill" |
 | `bin/speckit-init` | Installer | One command to set a project up |
-| `evals/` | Skill evaluations | Three scenarios testing the behaviours most likely to regress |
+| `evals/` | Skill evaluations | Behaviour evals + **trigger-accuracy evals** (the failure mode that's silent) |
+| `scripts/self-gate.sh` + `.github/workflows/` | CI | The kit gates itself on every push, on Linux **and** macOS bash 3.2 |
 
 ## Why append, not replace
 
@@ -124,6 +125,27 @@ bin/speckit-init                  installer
 preset/                           spec-kit preset (append strategy, 4 targets)
 skill/spec-driven-development/    agent skill + references
 global/working-agreements.md      global routing rules
-evals/skill-evals.json            skill evaluations
+evals/                            behaviour + trigger-accuracy evals, and two runners
+scripts/self-gate.sh              the kit's own gate
+.github/workflows/self-gate.yml   runs that gate on Linux and macOS
 BUILD_PLAN.md                     how this was built + the research behind it
 ```
+
+## Testing
+
+Two things can go wrong with a skill, so there are two kinds of test:
+
+- **Behaviour** (`evals/skill-evals.json`) — does it give good guidance once loaded?
+- **Triggering** (`evals/trigger-evals.json`) — does it load at all? A skill that doesn't
+  load fails *silently*: no error, the agent just handles the task itself. This is the
+  documented most-common failure mode, so trigger rate is the primary metric (**≥90%** on
+  relevant queries, **0** false triggers).
+
+`scripts/self-gate.sh` validates the preset manifest, the skill frontmatter, both eval files,
+and runs `speckit-init` end-to-end on a scratch repo — checking all four templates compose and
+that a re-run is idempotent. CI runs it on **both** Linux bash 5 and macOS system bash 3.2,
+because a construct that parses on one and not the other ships an installer that silently does
+nothing for every Mac user.
+
+See `evals/README.md` for the runners and how to record results.
+

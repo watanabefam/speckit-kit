@@ -1,0 +1,49 @@
+# Trigger-accuracy evals — promptfoo runner (secondary).
+#
+# The PRIMARY runner is evals/run-trigger-evals.py: it drives the `opencode` CLI
+# directly and its detection signal (the transcript's  -> Skill "<name>"  line)
+# was verified by execution during the build.
+#
+# This config uses promptfoo's OpenCode SDK provider plus the `skill-used`
+# assertion, which normalizes native `skill` tool parts — a cleaner signal, and
+# it gives CI-ready reporting. But it has two things NOT verified in this
+# environment. Verify both before trusting this runner:
+#
+#   1. TOOL AVAILABILITY. promptfoo documents that setting `working_dir` gives
+#      the OpenCode SDK only the read-only tools read/grep/glob/list. If `skill`
+#      is not in that set, the skill can never load and every should-trigger
+#      case fails for the wrong reason. Check whether `config.tools` can add
+#      `skill` back.
+#   2. GLOBAL SKILL DISCOVERY. The CLI discovers skills from
+#      ~/.agents/skills/. Whether the SDK provider does too is unconfirmed. If
+#      it does not, copy the skill into the working_dir's .agents/skills/ for
+#      the eval to see it.
+#
+# Setup:
+#   npm install -g promptfoo
+#   npm install @opencode-ai/sdk
+#
+# Run:
+#   promptfoo eval -c evals/promptfooconfig.yaml
+#   promptfoo view
+
+description: spec-driven-development trigger accuracy
+
+providers:
+  # Point this at a repository that HAS .specify/ (e.g. one set up by speckit-init).
+  - id: opencode:sdk:spec-kit
+    label: spec-kit
+    config:
+      working_dir: ../../speckit-sandbox
+
+  # Point this at a repository with NO .specify/. Any scratch git repo will do.
+  - id: opencode:sdk:plain
+    label: plain
+    config:
+      working_dir: ./fixtures/plain-repo
+
+prompts:
+  - '{{query}}'
+
+# Generated from trigger-evals.json so both runners share one query set.
+tests: file://promptfoo-tests.js

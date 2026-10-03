@@ -1,0 +1,77 @@
+name: Self Gate
+
+# The kit gates itself, the same way it asks adopters' repos to.
+#
+# There is deliberately NO path filter. A check that skips the change in front of
+# it is not a cheaper check, it is an absent one - and an absent check reads to a
+# reviewer as "none required" rather than "none ran". (This is a lesson lifted
+# from a preset that shipped a defect it could not see: a path filter left one
+# file ungated, and a docs-only PR showed no checks at all.)
+#
+# Two runners for the STATIC gates, because one is not enough. macOS's system
+# bash is 3.2.57 - the only bash on a stock Mac - while GitHub's Linux runners
+# have bash 5. A construct that parses on 5 but not 3.2 ships an installer that
+# silently does nothing for every Mac user, and a Linux-only gate stays green
+# throughout.
+#
+# The END-TO-END gate runs on Linux only. It exercises the specify CLI and file
+# operations, not bash-version parsing, so a second macOS run repeats the same
+# minutes-long init/resolve/idempotency sequence for no new signal. Bash
+# compatibility stays covered on both runners by the static gate (which runs
+# under each runner's default bash) plus the explicit /bin/bash -n step below.
+# Measured: static gates take ~0.1s; the E2E section is effectively the whole
+# build time, so running it twice doubles the build for nothing.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  static-gate:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      # macOS-only extra step: parse the installer with the SYSTEM bash, not the
+      # one on PATH. On a GitHub macOS runner `bash` is Homebrew's 5.x, whereas
+      # an adopter's Mac has 3.2.57 at /bin/bash - so the PATH bash cannot see
+      # the bug this step exists to catch.
+      - name: Parse installer under macOS system bash 3.2
+        if: runner.os == 'macOS'
+        run: |
+          /bin/bash --version | head -1
+          /bin/bash -n bin/speckit-init
+          /bin/bash scripts/self-gate.sh --no-e2e
+          echo "system bash parsed the installer and passed the static gate"
+
+      - name: Static gate (no E2E)
+        if: runner.os != 'macOS'
+        run: bash scripts/self-gate.sh --no-e2e
+
+  e2e-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install specify CLI
+        run: |
+          command -v specify >/dev/null 2>&1 || uv tool install specify-cli
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Self gate (full, incl. E2E)
+        run: bash scripts/self-gate.sh

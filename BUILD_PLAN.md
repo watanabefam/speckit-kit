@@ -198,6 +198,41 @@ contains zero references to templates.
 (`Faq.astro` 59 new lines, +50 insertions across 5 files). The discoveries earned it at this
 scale; that ratio is the reason F2 is documented rather than fixed.
 
+## Improvement pass (2026-10-03)
+
+Research: Anthropic's `skill-creator` guidance and skill best practices, the Red Hat write-up
+on skill testing, promptfoo's OpenCode provider, and the CI pattern in an established preset
+(`specassay`).
+
+### What the research changed
+
+| Finding | Action |
+| --- | --- |
+| **Trigger accuracy was completely untested** — 0 should-trigger and 0 should-not-trigger queries. Silent misfire is the documented *most common* way a skill fails, and it produces no error at all. | Added `evals/trigger-evals.json` (10 should-trigger + 10 near-miss negatives) and `evals/run-trigger-evals.py` |
+| `skill-creator`'s evals are **ephemeral** — they don't survive the session, so a later edit can't be re-checked | Both runners are committed and re-runnable; the self-gate validates the eval data |
+| promptfoo supports OpenCode (`opencode:sdk`) and has a **`skill-used`** assertion that checks *routing*, not output text | Added as the secondary runner, with its two unverified assumptions documented |
+| An established preset's CI comments describe a defect class we could ship: *"macOS's system bash (3.2.57) cannot parse… the workflow was green throughout, because it only ever ran on Linux bash 5"* | Added `scripts/self-gate.sh` + a two-OS CI workflow |
+| Rigid ALL-CAPS imperatives are an authoring smell | Checked — we have none (0 in SKILL.md) |
+
+### The gate caught a real problem on its first run
+
+The end-to-end check asserted `run1 lines == run2 lines` and failed: `33 -> 32`.
+
+Investigation: spec-kit's **own** agent-context extension inserts a blank line before its
+managed block when it first materializes, and our rewrite normalizes it on the next run.
+Verified the difference is **whitespace-only** and that **run2 == run3 byte-for-byte**.
+
+So the assertion was wrong, not the code: idempotency does not mean "run1 equals run2" — it
+means *no content change, no marker duplication, and a fixed point*. The gate now asserts
+exactly that. Patching around it was rejected because the cause is in a spec-kit-owned file
+we must not modify (an upstream update would overwrite it).
+
+### Installer bash-version check (no bug)
+
+Checked `bin/speckit-init` against macOS system bash 3.2.57 — it parses, and in fact
+`env bash` resolves to `/bin/bash` (3.2.57) on this machine, so it has been running under
+3.2 all along. The CI job on macOS exists to keep it that way.
+
 ## Known limitations
 
 - **Pre-marker AGENTS.md content** cannot be auto-replaced. The installer is non-destructive:
