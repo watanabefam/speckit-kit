@@ -1,0 +1,47 @@
+schema_version: "1.0"
+
+preset:
+  id: "spec-driven-development"
+  name: "Spec-Driven Development Addenda"
+  version: "1.0.0"
+  description: "Appends problem framing, traceability, approval boundaries and verification sections to the core spec, plan and task templates without replacing them."
+  author: "watanabefam"
+  repository: "https://github.com/watanabefam/speckit-kit"
+  license: "MIT"
+
+requires:
+  # Bounded above as well as below: spec-kit is pre-2.0 and the append targets
+  # (spec/plan/tasks/constitution templates) are core template names.
+  speckit_version: ">=1.0.0,<2.0.0"
+
+provides:
+  templates:
+    - type: "template"
+      name: "constitution-template"
+      file: "templates/constitution-addendum.md"
+      description: "Appends eight delivery principles to the constitution template"
+      strategy: "append"
+
+    - type: "template"
+      name: "spec-template"
+      file: "templates/spec-addendum.md"
+      description: "Adds Carried Forward, Problem, Goals/Non-Goals, MVP scope and Requirement Traceability to the spec template"
+      strategy: "append"
+
+    - type: "template"
+      name: "plan-template"
+      file: "templates/plan-addendum.md"
+      description: "Adds repository findings, alternatives, risks, requirement-to-design traceability and implementation boundaries to the plan template"
+      strategy: "append"
+
+    - type: "template"
+      name: "tasks-template"
+      file: "templates/tasks-addendum.md"
+      description: "Adds per-task requirement links, scope boundaries and verification to the task template"
+      strategy: "append"
+
+tags:
+  - "spec-driven-development"
+  - "traceability"
+  - "verification"
+  - "templates"

@@ -1,0 +1,15 @@
+{
+  "schema_version": "1.0",
+  "presets": {
+    "spec-driven-development": {
+      "version": "1.0.0",
+      "source": "local",
+      "manifest_hash": "sha256:af937bebe044963dd4e0c2197cc2ddc162e9822ca82fa2f2b28b97d08ee3aed9",
+      "enabled": true,
+      "priority": 10,
+      "registered_commands": {},
+      "registered_skills": {},
+      "installed_at": "2026-10-03T15:13:45.033832+00:00"
+    }
+  }
+}

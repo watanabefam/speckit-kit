@@ -148,6 +148,60 @@ when it perceives the task needs help deciding, not when it thinks it can just d
 Those two runs disagreed and I nearly reported the second as a regression. Both were noise.
 The runner now defaults to `--runs 3` and warns if you pass `--runs 1`.
 
+### Description optimization attempt — the description is not the lever
+
+A second description was written from the failure pattern, reframing the skill as
+**"Required process for any code change… Load this before writing code"** rather than optional
+capability. Hypothesis: the misses are all *"just do this"* shapes, so signalling that the
+skill is mandatory before coding would catch them.
+
+Measured with the same method (3 runs/query, threshold 0.5):
+
+| Query | Description A | Description B |
+| --- | --- | --- |
+| st-01 | 1/3 | 1/3 |
+| st-02 | **2/3 pass** | 0/3 |
+| st-03 | 2/3 pass | 3/3 pass |
+| st-04 | **2/3 pass** | 1/3 |
+| st-05 | 1/3 | **2/3 pass** |
+| st-06 | 0/3 | 0/3 |
+| st-07 | 3/3 pass | 2/3 pass |
+| st-08 | 1/3 | **2/3 pass** |
+| st-09 | 2/3 pass | 3/3 pass |
+| st-10 | 2/3 pass | 3/3 pass |
+| **total** | **6/10 = 60%** | **6/10 = 60%** |
+
+**The aggregate is identical while four queries swap sides.** Four of ten moving in opposite
+directions is what noise looks like; a real description effect would move the total.
+
+Two conclusions, both earned:
+
+1. **The description is near its ceiling for this skill.** Two structurally different
+   wordings produce the same rate. Rewriting it again is unlikely to help.
+2. **The residual ~40% is platform routing behaviour, not a defect to fix.** `st-01`
+   ("Add CSV export…") and `st-06` ("Refactor the payment module…") never trigger under
+   *either* description — they are pure task-shaped requests with no process signal, exactly
+   the category Anthropic documents as not routing to skills.
+
+Description B was therefore reverted: it measured no better, and A is the plainer wording.
+The experiment is recorded rather than deleted, because "we tried this and it didn't move"
+is the finding.
+
+### What this means for the 90% target
+
+Anthropic's ≥90% target is stated for general skill corpora. For a skill whose whole job is
+*deciding how much process work warrants*, a meaningful share of relevant requests will be
+ones the model believes it can just do — those will not route, by design. The honest
+position is that this skill's realistic ceiling on task-shaped requests is **~60%**, and the
+routing is reliable (**2–3 of 3**) on requests carrying process language.
+
+If a higher rate matters more than precision, the lever is **not** the description — it is
+scoping the skill's stated trigger to process-shaped requests only (narrow, honest, and
+measures high), or pushing the workflow into the commands so it doesn't depend on a skill
+loading at all.
+
+
+
 ## Runner bug found by this work
 
 The first `--runs 3` attempt **hung for over three hours** on a single query.
