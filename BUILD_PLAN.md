@@ -165,6 +165,39 @@ path, not from execution, because Freebuff ships as a desktop app with no CLI.
 
 ---
 
+## End-to-end trial (2026-10-03)
+
+First real use of the kit: `astro` + an FAQ block (a fourth Tina block type), all seven stages.
+
+**Verdict: the addenda are load-bearing, not decorative.** Constraints pulled the repo's own
+non-negotiables back in; Repository Findings discovered *"no unit/integration test suite
+exists"* and *"there is no `[slug]` route"*, which a blind plan would have got wrong;
+Must-Not-Change was honoured (`git diff` clean on all protected files); traceability ran
+FR → design → task → verification; converge verified against evidence by re-running
+`npm run check` (0 errors, 20 files) rather than trusting checkboxes.
+
+**The §8 repair-the-earliest-artifact rule fired for real.** The plan's Repository Findings
+missed `src/content.config.ts` — a Zod `_template` enum that breaks `npm run check` without
+the new value. The agent hit it at implementation, fixed the code, then went back and
+repaired the plan, annotating *"missed in the first draft"*. Not symptom-patching.
+
+### Findings and resolutions
+
+| # | Finding | Resolution after research |
+| --- | --- | --- |
+| F1 | Constitution numbering collision: core principles `I–V`, our append `I–VIII`, so two `I.` headings | **No change — downgraded.** `openup-governance` uses Roman numerals the same way, namespaced under its own `##` section; `specassay` uses `### Article:`. Both established appends namespace identically. My planned "fix" (drop numerals) would have deviated from convention for no benefit. |
+| F2 | Proportionality isn't enforced: ~1,000 lines of artifacts for ~109 lines of code (9:1) | **Document, don't build.** Spec Kit's own answer is the bundled **`lean` preset**. Adding conditional logic to templates would fight that design. Documented in the README, including the compatibility constraint below. |
+| F3 | Repository Findings listed 7 components but missed the file that enumerates the same set (`src/content.config.ts` `_template` enum) | **Fixed.** `plan-addendum.md` now opens Repository Findings with a "Sweep before you list" instruction requiring a search for every occurrence of the concept, explicitly including validation schemas, type unions, literal enums and registries. |
+
+**F2 compatibility constraint (important):** `lean` replaces the core commands with prompts
+that generate artifacts directly, **bypassing the template files**. Every section this preset
+appends therefore has no effect under `lean`. Verified: `lean/commands/speckit.specify.md`
+contains zero references to templates.
+
+**Trial cost:** 8 artifacts / ~1,000 lines of documentation for ~109 lines of code changed
+(`Faq.astro` 59 new lines, +50 insertions across 5 files). The discoveries earned it at this
+scale; that ratio is the reason F2 is documented rather than fixed.
+
 ## Known limitations
 
 - **Pre-marker AGENTS.md content** cannot be auto-replaced. The installer is non-destructive:

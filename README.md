@@ -97,6 +97,19 @@ mostly **discovery-only** in the catalog, so install them with `--from`:
 | `workflow-preset` | Behaviour-first specification and "agent-native handoff orchestration". |
 | `explicit-task-dependencies` | Explicit `depends on T###` declarations plus an execution-wave DAG. |
 | `test-first-governance` | TDD/BDD Gherkin scenarios, traceability, risk-based quality gates. |
+| `lean` | **Bundled** (`specify preset add lean`, no download). Replaces the five core commands with stripped-down prompts — "just the prompt, just the artifact". |
+
+### Proportionality: use `lean`, don't expect this preset to downscale
+
+This repo's addenda are unconditional: they add substance to spec/plan/tasks at every scale.
+There is no "small feature" mode, and that is deliberate — Spec Kit's own answer to
+proportionality is a **preset choice**, not conditional logic inside templates.
+
+Stay away from `lean` if you want these addenda, and vice versa. `lean` **replaces the core
+commands with prompts that generate artifacts directly, bypassing the template files
+entirely** — so every section this preset appends has no effect under `lean`. The two are
+mutually exclusive in practice: pick `lean` for small, well-understood work, and this preset
+when the artifact quality is worth the ceremony.
 
 Notably, **none of the 40 community presets ship an agent skill** — the methodology layer
 that makes an agent *behave* is not provided by any of them. That is this repo's main

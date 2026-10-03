@@ -48,6 +48,21 @@
 Filled in from inspecting the code, **before** proposing changes. A plan written without
 this section is not trustworthy.
 
+**Sweep before you list.** A new block, field, entity, or enum member almost always appears
+in more than one place. Search the repository for every occurrence of the concept — not just
+the obvious component. Check at least:
+
+- the schema or definition
+- **any layer that enumerates the same set** — a validation schema (Zod, JSON Schema), a type
+  union, a literal enum, a registry, a route table
+- the component / handler
+- the renderer or dispatch site
+- existing tests and fixtures
+
+A file that re-lists the same set (for example a `_template` enum mirroring the list of block
+types) MUST be updated too, or the build fails on the new value — and it will fail *late*,
+at implementation or typecheck. Enumerate those files here explicitly.
+
 ### Relevant Components
 
 - [Files, modules, services]
