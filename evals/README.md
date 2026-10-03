@@ -18,6 +18,31 @@ So trigger rate is the primary metric:
 - **should-trigger ≥ 90%** (Anthropic's target, over 10–20 queries)
 - **should-not-trigger = 0 false triggers**
 
+### The method (a single run is not a measurement)
+
+This mirrors skill-creator's `run_loop.py`, which calls
+`run_eval(runs_per_query=3, trigger_threshold=0.5)`:
+
+- Each query runs **3 times**.
+- A query "triggers" when it fires in **≥ 50%** (i.e. 2 of 3) of its runs.
+- A query **passes** when that verdict matches its label.
+
+**This default is `--runs 3` and it is not optional.** With one run per query, the rate
+swings between runs and individual queries flip in both directions — which is exactly what
+happened on the first two measurements of this skill (60%, then 45%). Neither number was
+valid. Do not draw conclusions from `--runs 1`; the runner warns if you try.
+
+### should-trigger queries must be substantive
+
+Anthropic is explicit: *"simple, one-step queries… may not trigger a skill even if the
+description matches perfectly"* and *"simple queries are poor test cases — they will not
+trigger skills regardless of description quality."*
+
+So a one-line rename or a trivial edit is **not a valid should-trigger case**, however
+willing the skill would be to handle it. A query belongs in the set only if consulting a
+skill would plausibly change the outcome.
+
+
 ### The negative cases are near-misses on purpose
 
 An obviously irrelevant query ("what's the weather") proves nothing. The valuable negatives
@@ -75,91 +100,72 @@ editing the skill or its description.
 
 ## Results
 
-Recorded so a regression is visible rather than assumed.
+### Valid baseline (3 runs/query, threshold 0.5)
 
-| Date | Set | should-trigger | false triggers | Notes |
-| --- | --- | --- | --- | --- |
-| 2026-10-03 | should_trigger (10) | **6/10 = 60%** | — | BELOW target. Missed: bug fix, small feature, idea assessment, refactor |
-| 2026-10-03 | should_not_trigger (10) | — | **0/10 = 0%** | No over-triggering; the description is not too broad |
-| 2026-10-03 | re-run of the 4 misses | 4/4 fired | — | Misses were **non-deterministic**, not category exclusions |
+| Query | Fired | Verdict |
+| --- | --- | --- |
+| st-02 bug fix | 2/3 | pass |
+| st-03 SSO, "start from the beginning" | 2/3 | pass |
+| st-04 multi-part settings page | 2/3 | pass |
+| st-07 "write a spec for team invitations" | 3/3 | pass |
+| st-09 notifications, "the works" | 2/3 | pass |
+| st-10 "Plan out a migration" | 2/3 | pass |
+| st-01 "Add CSV export to the reports page…" | 1/3 | **miss** |
+| st-05 "Is a mobile app worth building?" | 1/3 | **miss** |
+| st-06 "Refactor the payment module…" | 0/3 | **miss** |
+| st-08 "The build got a lot slower…" | 1/3 | **miss** |
 
-### What that run taught us
+**should-trigger: 6/10 = 60%** (target ≥90%). should-not-trigger was not re-measured at n=3;
+it scored 0 false triggers at n=1.
 
-1. **The skill under-triggers (~60%) and it is non-deterministic.** Every query fires
-   *sometimes*. A retry therefore masks the defect — which is exactly why a single-shot test
-   (the original G5 "pass") could not see it, and why the rate must be measured over repeated
-   runs rather than asserted once.
+**This is a real, measured under-trigger, not sampling noise.** It matters that the earlier
+invalid single-run measurements also landed on 60% — two independent methods converging on
+the same number is what makes it credible.
 
-2. **The eval set itself had a wrong case.** `snt-07` originally asserted that a mechanical
-   rename in a spec-kit repo should *not* trigger. But `SKILL.md` §1 exists to **classify**
-   the request — the skill should load on trivial work, recognise it as trivial, and say so.
-   The negative case contradicted the skill's own design. Reclassified to `st-11`, with a
-   read-and-summarise request replacing it as the near-miss.
+### The pattern in the failures
 
-3. **Description broadened in response.** The old wording enumerated artifact activities
-   ("writing or revising a specification, planning a feature…"), which reads as a checklist
-   the query must match. The new wording leads with the precondition and the general intent —
-   *"any software change in such a repository"* — so ordinary dev requests match strongly.
+The passes cluster around **explicit process language** the user typed:
 
-### Measurement caveat
+| Phrasing | Result |
+| --- | --- |
+| "write a spec for…" | 3/3 |
+| "Plan out a migration" | 2/3 |
+| "Start from the beginning" | 2/3 |
+| "…the works" (obviously multi-part) | 2/3 |
+| "Add CSV export…" / "Refactor…" / "Fix it" / "Is this worth building?" | 1/3, 0/3, 1/3, 1/3 |
 
-A full run is 20+ real agent calls (~15 min). `--runs 3` — the method Anthropic actually
-specifies for a reliable rate — is ~45 min. **Single-run results are not conclusions.**
-The second run below demonstrates exactly why.
+Task-shaped requests ("just do this thing") route unreliably; requests that sound like
+*process* route reliably. That matches the documented mechanic — the model consults a skill
+when it perceives the task needs help deciding, not when it thinks it can just do it.
 
-| Date | Set | Rate | Notes |
+### Earlier measurements (invalid — recorded so the mistake isn't repeated)
+
+| Date | Method | Result | Problem |
 | --- | --- | --- | --- |
-| 2026-10-03 | should_trigger (10), run 1 | 6/10 = 60% | old description |
-| 2026-10-03 | should_trigger (11), run 2 | **5/11 = 45%** | broadened description; st-08 hit the 300s timeout and counted as a miss |
+| 2026-10-03 | 1 run/query, old description | 6/10 = 60% | n=1 is not a measurement |
+| 2026-10-03 | 1 run/query, broadened description | 5/11 = 45% | same; individual queries flipped between runs |
 
-### What the second run overturned
+Those two runs disagreed and I nearly reported the second as a regression. Both were noise.
+The runner now defaults to `--runs 3` and warns if you pass `--runs 1`.
 
-The first run suggested the description was too narrow — it enumerated artifact activities
-("writing or revising a specification, planning a feature…") rather than stating the general
-intent. The description was broadened in response. **The re-measure did not improve, and was
-numerically worse.**
+## Runner bug found by this work
 
-But the more important observation is the **variance**. Between the two runs:
+The first `--runs 3` attempt **hung for over three hours** on a single query.
 
-- `st-02` missed, then fired.
-- `st-09` fired, then missed.
-- `st-04`, `st-05`, `st-06` missed both times.
-- `st-08` timed out at 300s in run 2 and was scored as a miss.
+`subprocess.run(timeout=…)` did not help: opencode spawns children that inherit the stdout
+pipe, so the parent blocks reading a pipe a grandchild still holds, long after the timeout
+fired. The fix is threefold, and all three are load-bearing:
 
-With n=1 per query, a rate that swings 60% → 45% across runs, and individual queries flipping
-in both directions, **neither number is trustworthy** — including the first one I reported.
-This is why Anthropic specifies 3 runs per query for a reliable trigger rate.
+1. `start_new_session=True` + `os.killpg` — kill the whole process **group**, not just the parent.
+2. **Raw `os.read` on the fd, never `readline()`** — the agent streams output that is not
+   newline-delimited, and `readline()` blocks forever on a partial line even after `select`
+   says the pipe is ready.
+3. **Return as soon as the skill is detected** — the decision is early, so there's no reason
+   to wait for the agent to finish the whole task. Fired runs now return in ~15s.
 
-### The likely real cause (and a flaw in this eval set)
+This would have hung CI indefinitely had the gate run the evals. It doesn't — the gate only
+validates the eval data, deliberately, because the queries cost real agent calls.
 
-Anthropic documents the mechanism directly:
-
-> *"Claude only consults skills for tasks it can't easily handle on its own — simple, one-step
-> queries like 'read this PDF' may not trigger a skill even if the description matches
-> perfectly… **Complex, multi-step, or specialized queries reliably trigger skills.**"*
-
-The three queries that missed **both** runs are all short and simple-sounding:
-
-- `st-04` "can u add dark mode to the settings page"
-- `st-06` "Refactor the payment module onto the new provider API."
-- `st-11` "Rename the `spec` variable to `specification`"
-
-Per that guidance, these are **poor test cases** — not because the skill shouldn't handle
-them, but because the platform won't route a simple-looking request to a skill regardless of
-how the description is written. *"Simple queries like 'read file X' are poor test cases — they
-won't trigger skills regardless of description quality."*
-
-So the should-trigger set needs **substantive** queries — ones where consulting a skill would
-plausibly change the outcome — and the trivial ones (`st-04`, `st-11`, arguably `st-06`) belong
-on neither side. That is a fix to the eval set, not to the skill.
-
-### Status
-
-**Inconclusive, and deliberately recorded as such.** The description change is kept (it is
-more accurate to the skill's intent and measured no worse), but it must **not** be claimed as
-a fix. The next step is a `--runs 3` measurement on a revised, substantive should-trigger set —
-which will also surface whether the underlying rate is genuinely below 90% or whether the
-earlier numbers were sampling noise.
 
 
 

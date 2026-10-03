@@ -2,11 +2,15 @@ name: Self Gate
 
 # The kit gates itself, the same way it asks adopters' repos to.
 #
-# There is deliberately NO path filter. A check that skips the change in front of
-# it is not a cheaper check, it is an absent one - and an absent check reads to a
-# reviewer as "none required" rather than "none ran". (This is a lesson lifted
-# from a preset that shipped a defect it could not see: a path filter left one
-# file ungated, and a docs-only PR showed no checks at all.)
+# There is deliberately NO top-level path filter. A check that skips the change
+# in front of it is not a cheaper check, it is an absent one - and an absent
+# check reads to a reviewer as "none required" rather than "none ran". (This
+# is a lesson lifted from a preset that shipped a defect it could not see: a
+# path filter left one file ungated, and a docs-only PR showed no checks at
+# all.) Instead the expensive E2E job below ALWAYS runs to a green/red
+# conclusion, but fast-passes docs-only changes inside the job (see
+# "Detect code changes"). The check stays visible; only the minutes-long
+# init/resolve/idempotency sequence is skipped.
 #
 # Two runners for the STATIC gates, because one is not enough. macOS's system
 # bash is 3.2.57 - the only bash on a stock Mac - while GitHub's Linux runners
@@ -63,15 +67,60 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect code changes
+        id: changes
+        run: |
+          set -euo pipefail
+          if [ "${GITHUB_EVENT_NAME:-}" = "pull_request" ] && [ -n "${GITHUB_BASE_REF:-}" ]; then
+            git fetch origin "${GITHUB_BASE_REF}" --depth=1 >/dev/null 2>&1 || true
+            CHANGED="$(git diff --name-only "origin/${GITHUB_BASE_REF}...HEAD" 2>/dev/null || true)"
+          elif [ -n "${GITHUB_BEFORE:-}" ] && [ "$GITHUB_BEFORE" != "0000000000000000000000000000000000000000" ]; then
+            CHANGED="$(git diff --name-only "$GITHUB_BEFORE" HEAD 2>/dev/null || git show --name-only --pretty=format: HEAD)"
+          else
+            CHANGED="$(git diff --name-only HEAD~1..HEAD 2>/dev/null || git show --name-only --pretty=format: HEAD)"
+          fi
+          echo "Changed files:"
+          echo "$CHANGED"
+          if echo "$CHANGED" | grep -Eq '^(bin/|preset/|skill/|scripts/|\.github/workflows/|\.specify/|\.opencode/)'; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+            echo "Code change detected — full E2E will run."
+          else
+            echo "code=false" >> "$GITHUB_OUTPUT"
+            echo "Docs/evals-only change — E2E heavy steps will fast-pass."
+          fi
 
       - uses: astral-sh/setup-uv@v5
+        if: steps.changes.outputs.code == 'true'
         with:
           enable-cache: true
 
+      - name: Cache specify CLI tool dir
+        if: steps.changes.outputs.code == 'true'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/uv
+            ~/.local/share/uv/tools
+            ~/.local/bin/specify
+          key: ${{ runner.os }}-specify-cli-v1
+          restore-keys: |
+            ${{ runner.os }}-specify-cli-
+
       - name: Install specify CLI
+        if: steps.changes.outputs.code == 'true'
         run: |
           command -v specify >/dev/null 2>&1 || uv tool install specify-cli
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Self gate (full, incl. E2E)
+        if: steps.changes.outputs.code == 'true'
         run: bash scripts/self-gate.sh
+
+      - name: Fast-pass (docs-only, E2E not needed)
+        if: steps.changes.outputs.code != 'true'
+        run: |
+          bash scripts/self-gate.sh --no-e2e
+          echo "E2E skipped: no code paths changed (bin/, preset/, skill/, scripts/, workflows). Static gate passed; E2E remains green and visible."

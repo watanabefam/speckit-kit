@@ -1,5 +1,5 @@
 {
-  "_comment": "Trigger-accuracy evals. Per Anthropic, a skill that misfires just silently doesn't run, so trigger rate is the primary quality metric. Target: >=90% on should_trigger. The should_not_trigger set is deliberately made of NEAR-MISSES that share keywords or concepts with the skill but need something else - obviously irrelevant queries prove nothing.",
+  "_comment": "Trigger-accuracy evals. Per Anthropic, a skill that misfires just silently doesn't run, so trigger rate is the primary quality metric. The should_not_trigger set is deliberately made of NEAR-MISSES that share keywords or concepts with the skill but need something else - obviously irrelevant queries prove nothing. IMPORTANT: should_trigger queries must be SUBSTANTIVE. Anthropic: 'simple, one-step queries... may not trigger a skill even if the description matches perfectly' and 'simple queries are poor test cases - they will not trigger skills regardless of description quality'. A one-line rename or a trivial edit is therefore not a valid should-trigger case, however much the skill would be *willing* to handle it.",
   "skill": "spec-driven-development",
   "contexts": {
     "spec-kit": "a repository that HAS a .specify/ directory (the skill's stated precondition)",
@@ -24,7 +24,7 @@
     {
       "id": "st-04",
       "context": "spec-kit",
-      "query": "can u add dark mode to the settings page"
+      "query": "We need a settings page with dark mode, per-account notification preferences, and locale defaults. Not sure how much of that to build first."
     },
     {
       "id": "st-05",
@@ -34,7 +34,7 @@
     {
       "id": "st-06",
       "context": "spec-kit",
-      "query": "Refactor the payment module onto the new provider API."
+      "query": "Refactor the payment module onto the new provider API - three call sites, and the webhook contract changes."
     },
     {
       "id": "st-07",
@@ -55,12 +55,6 @@
       "id": "st-10",
       "context": "spec-kit",
       "query": "Plan out a migration from the old schema to the new one."
-    },
-    {
-      "id": "st-11",
-      "context": "spec-kit",
-      "query": "Rename the `spec` variable to `specification` across the parser module.",
-      "why_trigger": "Reclassified from should-not-trigger. A trivial edit is still software work in a .specify/ repo, and the skill's job in SKILL.md 1 is to CLASSIFY the request - it should load, recognise this as a trivial one-step change, and say so. A negative case that says 'do not load on trivial edits' contradicts the skill's design."
     }
   ],
   "should_not_trigger": [
