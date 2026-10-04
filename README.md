@@ -24,6 +24,29 @@ Presets default to `replace`, which would mean hand-merging upstream template ch
 forever — the fork problem, one level down. `strategy: "append"` means the core templates
 keep improving underneath and this repo only owns its delta.
 
+## Why there are also command prepends
+
+**`append` alone is not enough.** An addendum only reaches an artifact if the agent resolves
+the composed template — and agents do not do that consistently. A dogfood run produced a
+`plan.md` and a `tasks.md` carrying their appended sections while `spec.md` silently had
+none, even though the template resolved correctly (213 lines, addenda included) and the
+command explicitly instructed *"Copy the resolved `spec-template` to `spec.md` as the
+starting point."*
+
+The command is the instruction the agent actually follows, so the preset also **prepends a
+short section-integrity rule** to `speckit.specify`, `speckit.plan` and `speckit.tasks`. It
+tells the agent to materialise the resolved template, edit it in place, and never drop a
+section. `prepend` composes with upstream command updates instead of replacing them, and it
+inserts *after* the YAML frontmatter (verified — the first line stays `---`).
+
+Verified effect: before the prepends, a generated `spec.md` had **0** appended sections;
+after, two consecutive runs produced specs with **all 5**, a plan with all 4, and a tasks
+file with all 3. `scripts/self-gate.sh` now asserts the prepends are present in the
+materialised commands and that the frontmatter survived.
+
+This is the same pattern the community's `toc-navigation` preset uses. `specassay` uses
+`append` alone and has the same latent flaw.
+
 ## Why the constitution is a template append, not a seed file
 
 The obvious approach — dropping a `.specify/memory/constitution.md` into place — is the one

@@ -91,6 +91,37 @@ for f in files:
 sys.exit(0 if ok else 1)
 PY
 
+hdr "3b. command prepends (this is what makes the addenda land)"
+python3 - "$ROOT/preset" <<'PY' || fail=1
+import os, re, sys
+base = sys.argv[1]
+raw = open(os.path.join(base, "preset.yml"), encoding="utf-8").read()
+ok = True
+def need(cond, msg):
+    global ok
+    if cond: print(f"  ok    {msg}")
+    else:    print(f"  FAIL  {msg}"); ok = False
+
+# Every command entry must be a prepend (never replace: replace would stop us
+# composing with upstream command updates).
+cmds = re.findall(r'type:\s*"command".*?(?=type:\s*"|\Z)', raw, re.S)
+need(len(cmds) >= 3, f"declares at least 3 command entries (found {len(cmds)})")
+for want in ("speckit.specify", "speckit.plan", "speckit.tasks"):
+    need(want in raw, f"prepends {want}")
+bad = [c for c in cmds if 'strategy: "prepend"' not in c]
+need(not bad, "every command entry uses strategy: prepend (not replace)")
+
+for f in re.findall(r'(?m)^\s+file:\s*"(commands/[^"]+)"', raw):
+    p = os.path.join(base, f)
+    need(os.path.isfile(p), f"command file exists: {f}")
+    if os.path.isfile(p):
+        body = open(p, encoding="utf-8").read()
+        # The instruction is worthless if it does not name the real invocation.
+        need("resolve-template.sh" in body, f"{f} names resolve-template.sh")
+        need("Section integrity" in body, f"{f} states the section-integrity rule")
+sys.exit(0 if ok else 1)
+PY
+
 hdr "4. eval data parses"
 python3 - "$ROOT/evals" <<'PY' || fail=1
 import json, os, sys
@@ -145,6 +176,20 @@ if [ "$E2E" = "1" ]; then
       fi
     done
     rm -rf "$SGR"
+    # The prepend is the actual mechanism that makes the addenda land, so assert it
+    # reached the MATERIALISED command the agent reads, not just the preset source.
+    for c in specify plan tasks; do
+      if grep -q "Section integrity" ".opencode/commands/speckit.$c.md" 2>/dev/null; then
+        ok "speckit.$c carries the section-integrity prepend"
+      else
+        bad "speckit.$c is missing the section-integrity prepend — addenda will land unreliably"
+      fi
+    done
+    # A prepend must never displace the command's frontmatter.
+    for c in specify plan tasks; do
+      first=$(head -1 ".opencode/commands/speckit.$c.md" 2>/dev/null)
+      if [ "$first" = "---" ]; then ok "speckit.$c frontmatter intact"; else bad "speckit.$c frontmatter displaced (first line: $first)"; fi
+    done
     for m in "SPECKIT-BRIDGE START" "SPECKIT-BRIDGE END" "<!-- SPECKIT START -->" "<!-- SPECKIT END -->"; do
       c=$(grep -c "$m" AGENTS.md 2>/dev/null || true)
       if [ "$c" = "1" ]; then ok "marker once: $m"; else bad "marker $m appears $c times"; fi

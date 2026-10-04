@@ -3,7 +3,7 @@ schema_version: "1.0"
 preset:
   id: "spec-driven-development"
   name: "Spec-Driven Development Addenda"
-  version: "1.0.0"
+  version: "1.1.0"
   description: "Appends problem framing, traceability, approval boundaries and verification sections to the core spec, plan and task templates without replacing them."
   author: "watanabefam"
   repository: "https://github.com/watanabefam/speckit-kit"
@@ -16,6 +16,32 @@ requires:
 
 provides:
   templates:
+    # Command prepends: these are what make the template addenda land reliably.
+    #
+    # Why this exists: append-only presets depend on the agent resolving the composed
+    # template, and agents do not do so consistently — a dogfood run had plan.md and
+    # tasks.md carry the appended sections while spec.md silently did not. The command is
+    # the instruction the agent actually follows, so the section-integrity rule lives
+    # there. `prepend` composes with upstream command updates rather than replacing them
+    # (verified: prepend inserts after the YAML frontmatter, preserving it).
+    - type: "command"
+      name: "speckit.specify"
+      file: "commands/speckit.specify.prepend.md"
+      description: "Prepends a section-integrity instruction so appended template sections are not dropped from spec.md"
+      strategy: "prepend"
+
+    - type: "command"
+      name: "speckit.plan"
+      file: "commands/speckit.plan.prepend.md"
+      description: "Prepends a section-integrity instruction so appended template sections are not dropped from plan.md"
+      strategy: "prepend"
+
+    - type: "command"
+      name: "speckit.tasks"
+      file: "commands/speckit.tasks.prepend.md"
+      description: "Prepends a section-integrity instruction so appended template sections are not dropped from tasks.md"
+      strategy: "prepend"
+
     - type: "template"
       name: "constitution-template"
       file: "templates/constitution-addendum.md"

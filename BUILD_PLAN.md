@@ -233,6 +233,46 @@ Checked `bin/speckit-init` against macOS system bash 3.2.57 — it parses, and i
 `env bash` resolves to `/bin/bash` (3.2.57) on this machine, so it has been running under
 3.2 all along. The CI job on macOS exists to keep it that way.
 
+## Reliability fix: command prepends (2026-10-04)
+
+**The problem.** `append` on templates alone does not guarantee an addendum reaches an
+artifact. A dogfood run (speccing feature 001 in this repo) produced a `plan.md` and
+`tasks.md` carrying their appended sections while `spec.md` silently had none — even though
+`resolve-template.sh spec-template` returned the correct composed template (213 lines) and
+`speckit.specify` explicitly instructs *"Copy the resolved `spec-template` file to
+`SPECIFIED_FEATURE_DIRECTORY/spec.md` as the starting point"* (line 97). The agent listed the
+templates, saw `spec-addendum`, and wrote the spec without it.
+
+**Root cause.** The addendum's delivery depends on the *agent* resolving the composed
+template. That is agent-mediated behaviour, so it inherits the same unreliability as skill
+triggering — two different mechanisms, one underlying weakness.
+
+**Research.** How do established presets solve this?
+
+| Preset | Approach | Reliable? |
+| --- | --- | --- |
+| `toc-navigation` | `replaces` templates **+ command overrides** for specify/plan/tasks | yes — the command is what the agent follows |
+| `specassay` | `append` templates only | no — same latent flaw |
+
+**Fix.** Prepend a short section-integrity rule to the three commands. `prepend` (not
+`replace`) composes with upstream command updates, and was verified to insert *after* the
+YAML frontmatter, preserving it.
+
+**Verified.** Before: generated `spec.md` = 109 lines, **0** appended sections. After (three
+consecutive generated artifacts):
+
+| Artifact | Lines | Appended sections |
+| --- | --- | --- |
+| `specs/003-api-rate-limiter/spec.md` | 206 | 5 / 5 |
+| `specs/004-webhook-delivery-retries/spec.md` | 225 | 5 / 5 |
+| `specs/004-webhook-delivery-retries/plan.md` | 271 | 4 / 4 |
+| `specs/004-webhook-delivery-retries/tasks.md` | 324 | 3 / 3 |
+
+`scripts/self-gate.sh` now asserts, in CI on both platforms, that the prepends are present
+in the **materialised** commands and that the frontmatter survived.
+
+Preset version bumped 1.0.0 → 1.1.0.
+
 ## Known limitations
 
 - **Pre-marker AGENTS.md content** cannot be auto-replaced. The installer is non-destructive:

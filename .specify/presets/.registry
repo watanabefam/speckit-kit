@@ -2,14 +2,20 @@
   "schema_version": "1.0",
   "presets": {
     "spec-driven-development": {
-      "version": "1.0.0",
+      "version": "1.1.0",
       "source": "local",
-      "manifest_hash": "sha256:af937bebe044963dd4e0c2197cc2ddc162e9822ca82fa2f2b28b97d08ee3aed9",
+      "manifest_hash": "sha256:5f03583b90844b74fbf3e516333db2154d8bee0d1d79d16ca6c94d28fa2335e8",
       "enabled": true,
       "priority": 10,
-      "registered_commands": {},
+      "registered_commands": {
+        "opencode": [
+          "speckit.specify",
+          "speckit.plan",
+          "speckit.tasks"
+        ]
+      },
       "registered_skills": {},
-      "installed_at": "2026-10-04T02:02:52.984505+00:00"
+      "installed_at": "2026-10-04T04:04:00.828340+00:00"
     }
   }
 }
