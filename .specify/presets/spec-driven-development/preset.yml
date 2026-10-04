@@ -3,7 +3,7 @@ schema_version: "1.0"
 preset:
   id: "spec-driven-development"
   name: "Spec-Driven Development Addenda"
-  version: "1.1.0"
+  version: "1.2.0"
   description: "Appends problem framing, traceability, approval boundaries and verification sections to the core spec, plan and task templates without replacing them."
   author: "watanabefam"
   repository: "https://github.com/watanabefam/speckit-kit"
@@ -40,6 +40,22 @@ provides:
       name: "speckit.tasks"
       file: "commands/speckit.tasks.prepend.md"
       description: "Prepends a section-integrity instruction so appended template sections are not dropped from tasks.md"
+      strategy: "prepend"
+
+    # implement and converge generate no template artifact, so they carry the step
+    # rules (approved-work-only, evidence before done, honest ticking, handoff) that
+    # would otherwise live only in the skill — which fires on roughly 60% of relevant
+    # requests. Rules that must always apply cannot live behind a probabilistic trigger.
+    - type: "command"
+      name: "speckit.implement"
+      file: "commands/speckit.implement.prepend.md"
+      description: "Prepends the execution rules: approved work only, evidence before done, honest task ticking, repair the earliest artifact on contradiction"
+      strategy: "prepend"
+
+    - type: "command"
+      name: "speckit.converge"
+      file: "commands/speckit.converge.prepend.md"
+      description: "Prepends the convergence rules: evidence-based completion, no rounding up to green, verify declared boundaries, handoff discipline"
       strategy: "prepend"
 
     - type: "template"

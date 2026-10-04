@@ -91,7 +91,7 @@ for f in files:
 sys.exit(0 if ok else 1)
 PY
 
-hdr "3b. command prepends (this is what makes the addenda land)"
+hdr "3b. command contributions (this is what makes the rules actually apply)"
 python3 - "$ROOT/preset" <<'PY' || fail=1
 import os, re, sys
 base = sys.argv[1]
@@ -102,23 +102,35 @@ def need(cond, msg):
     if cond: print(f"  ok    {msg}")
     else:    print(f"  FAIL  {msg}"); ok = False
 
-# Every command entry must be a prepend (never replace: replace would stop us
-# composing with upstream command updates).
+# Every command entry must be a prepend. `replace` would stop us composing with
+# upstream command updates, and the rules here are additive by design.
 cmds = re.findall(r'type:\s*"command".*?(?=type:\s*"|\Z)', raw, re.S)
-need(len(cmds) >= 3, f"declares at least 3 command entries (found {len(cmds)})")
-for want in ("speckit.specify", "speckit.plan", "speckit.tasks"):
-    need(want in raw, f"prepends {want}")
+need(len(cmds) >= 5, f"declares at least 5 command entries (found {len(cmds)})")
 bad = [c for c in cmds if 'strategy: "prepend"' not in c]
-need(not bad, "every command entry uses strategy: prepend (not replace)")
+need(not bad, "every command entry uses strategy: prepend (never replace)")
 
-for f in re.findall(r'(?m)^\s+file:\s*"(commands/[^"]+)"', raw):
+# Each command must carry the specific rules for its step. These are the rules that
+# used to live only in the skill, which fires on roughly 60% of relevant requests -
+# so their presence in the command is the whole point of this preset.
+expected = {
+    "commands/speckit.specify.prepend.md":   ["Section integrity", "resolve-template.sh", "Choose the workflow first", "Ask only what materially matters"],
+    "commands/speckit.plan.prepend.md":      ["Section integrity", "resolve-template.sh", "Sweep before you list", "Stop at the approval gate"],
+    "commands/speckit.tasks.prepend.md":     ["Section integrity", "resolve-template.sh", "traces to a requirement", "Control scope"],
+    "commands/speckit.implement.prepend.md": ["Evidence before", "Tick tasks honestly", "earliest"],
+    "commands/speckit.converge.prepend.md":  ["Completion requires evidence", "round up to green", "Handoff discipline"],
+}
+files = set(re.findall(r'(?m)^\s+file:\s*"(commands/[^"]+)"', raw))
+for f, markers in expected.items():
+    need(f in files, f"declared: {os.path.basename(f)}")
     p = os.path.join(base, f)
-    need(os.path.isfile(p), f"command file exists: {f}")
-    if os.path.isfile(p):
-        body = open(p, encoding="utf-8").read()
-        # The instruction is worthless if it does not name the real invocation.
-        need("resolve-template.sh" in body, f"{f} names resolve-template.sh")
-        need("Section integrity" in body, f"{f} states the section-integrity rule")
+    if not os.path.isfile(p):
+        need(False, f"exists: {f}"); continue
+    body = open(p, encoding="utf-8").read()
+    missing = [m for m in markers if m not in body]
+    need(not missing, f"{os.path.basename(f)} carries its rules" + (f" (missing: {missing})" if missing else ""))
+    # A contribution must not carry its own frontmatter - prepend inserts after the
+    # command's frontmatter, so a second block would corrupt the command.
+    need(not body.lstrip().startswith("---"), f"{os.path.basename(f)} has no frontmatter of its own")
 sys.exit(0 if ok else 1)
 PY
 
@@ -176,20 +188,24 @@ if [ "$E2E" = "1" ]; then
       fi
     done
     rm -rf "$SGR"
-    # The prepend is the actual mechanism that makes the addenda land, so assert it
-    # reached the MATERIALISED command the agent reads, not just the preset source.
-    for c in specify plan tasks; do
-      if grep -q "Section integrity" ".opencode/commands/speckit.$c.md" 2>/dev/null; then
-        ok "speckit.$c carries the section-integrity prepend"
+    # The prepends are the mechanism that makes BOTH the template addenda and the step
+    # rules apply, so assert they reached the MATERIALISED commands the agent reads —
+    # not merely that the preset source declares them.
+    check_cmd() {
+      _c="$1"; _marker="$2"
+      if grep -q "$_marker" ".opencode/commands/speckit.$_c.md" 2>/dev/null; then
+        ok "speckit.$_c carries its contribution"
       else
-        bad "speckit.$c is missing the section-integrity prepend — addenda will land unreliably"
+        bad "speckit.$_c is missing its contribution (looked for: $_marker)"
       fi
-    done
-    # A prepend must never displace the command's frontmatter.
-    for c in specify plan tasks; do
-      first=$(head -1 ".opencode/commands/speckit.$c.md" 2>/dev/null)
-      if [ "$first" = "---" ]; then ok "speckit.$c frontmatter intact"; else bad "speckit.$c frontmatter displaced (first line: $first)"; fi
-    done
+      _first=$(head -1 ".opencode/commands/speckit.$_c.md" 2>/dev/null)
+      if [ "$_first" = "---" ]; then ok "speckit.$_c frontmatter intact"; else bad "speckit.$_c frontmatter displaced (first line: $_first)"; fi
+    }
+    check_cmd specify   "Choose the workflow first"
+    check_cmd plan      "Sweep before you list"
+    check_cmd tasks     "traces to a requirement"
+    check_cmd implement "Evidence before"
+    check_cmd converge  "Completion requires evidence"
     for m in "SPECKIT-BRIDGE START" "SPECKIT-BRIDGE END" "<!-- SPECKIT START -->" "<!-- SPECKIT END -->"; do
       c=$(grep -c "$m" AGENTS.md 2>/dev/null || true)
       if [ "$c" = "1" ]; then ok "marker once: $m"; else bad "marker $m appears $c times"; fi

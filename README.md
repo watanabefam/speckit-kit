@@ -11,8 +11,8 @@ using Spec Kit's own extension points rather than forking it.
 
 | Component | Mechanism | Purpose |
 | --- | --- | --- |
-| `preset/` | Spec Kit **preset**, `strategy: "append"` ×4 | Adds delivery principles to the constitution template, and problem framing, traceability and verification sections to the spec/plan/task templates — **without replacing core** |
-| `skill/spec-driven-development/` | **Agent skill** (agentskills.io) | Carries the methodology via progressive disclosure — ~100 tokens until triggered |
+| `preset/` | Spec Kit **preset** — `strategy: "append"` on 4 templates **+ `prepend` on 5 commands** | Adds delivery principles and traceability sections to the templates, **and** puts each step's enforceable rules into the command that runs that step |
+| `skill/spec-driven-development/` | **Agent skill** (agentskills.io) | The *reasoning* layer — why the rules exist and what they prevent. Does not restate them |
 | `global/working-agreements.md` | Global agent rules | Routing only (~25 lines): "this project uses Spec Kit, load the skill" |
 | `bin/speckit-init` | Installer | One command to set a project up |
 | `evals/` | Skill evaluations | Behaviour evals + **trigger-accuracy evals** (the failure mode that's silent) |
@@ -23,6 +23,31 @@ using Spec Kit's own extension points rather than forking it.
 Presets default to `replace`, which would mean hand-merging upstream template changes
 forever — the fork problem, one level down. `strategy: "append"` means the core templates
 keep improving underneath and this repo only owns its delta.
+
+## Why the rules live in the commands, not only in the skill
+
+The skill fires on roughly **60%** of relevant requests (measured — see `evals/`). A rule that
+must *always* apply cannot live behind a probabilistic trigger. So each step's enforceable
+rules are prepended to the command that runs that step:
+
+| Command | Carries |
+| --- | --- |
+| `speckit.specify` | workflow selection, product reasoning, ask only what matters, record assumptions instead of inventing requirements |
+| `speckit.plan` | inspect before proposing, the sweep for re-enumerated sets, repository-as-evidence, stop at the approval gate |
+| `speckit.tasks` | every task traces to a requirement, one verifiable outcome, scope control |
+| `speckit.implement` | approved work only, evidence before "done", tick tasks honestly, repair the earliest artifact |
+| `speckit.converge` | evidence-based completion, no rounding up to green, verify declared boundaries, handoff discipline |
+
+This is also what the ecosystem does: across 41 community presets, **39 use commands, 0 use
+skills**. A command is already loaded when it runs, so this costs nothing extra — there is no
+progressive-disclosure argument for putting step rules in a skill.
+
+The skill remains as the *reasoning* layer, and explicitly defers: **if the skill and a command
+disagree, the command wins.**
+
+Verified with the skill fully disabled (`~/.agents/skills` emptied): `/speckit.specify` still
+stated a workflow choice, recorded substantive assumptions rather than inventing requirements,
+and produced a spec carrying all five appended sections.
 
 ## Why there are also command prepends
 

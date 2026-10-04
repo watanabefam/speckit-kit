@@ -273,6 +273,63 @@ in the **materialised** commands and that the frontmatter survived.
 
 Preset version bumped 1.0.0 → 1.1.0.
 
+## P1: rules moved into the commands (2026-10-04)
+
+**Why.** The skill fires on ~60% of relevant requests. A rule that must *always* apply cannot
+live behind a probabilistic trigger. The template addenda had just been fixed the same way —
+by putting the instruction where the agent already looks.
+
+**Research.** Across all 41 community presets:
+
+| Mechanism | Presets using it |
+| --- | --- |
+| `commands` | **39 / 41** |
+| `templates` | 34 / 41 |
+| `scripts` | 11 / 41 |
+| **`skills`** | **0 / 41** |
+
+Command composition is also standard practice among established presets — `closed-vocabulary`
+uses `append` on `speckit.analyze`, `inventory-alignment` uses `append` + `wrap`,
+`agentstandards-gate` uses `wrap`. The authoring convention (from `closed-vocabulary`): no
+frontmatter in the contribution, clear headings, and an explicit non-interference contract
+("it only adds findings; it never removes, downgrades, or overrides").
+
+**Design.** One contribution per command, merging the existing section-integrity block with that
+step's rules — not two prepends per command, which would be noise.
+
+| Command | Carries |
+| --- | --- |
+| `specify` | workflow selection, product reasoning, ask only what matters, assumptions-not-inventions |
+| `plan` | inspect before proposing, the sweep, repository-as-evidence, approval gate |
+| `tasks` | traceability, one verifiable outcome, scope control |
+| `implement` | approved work only, evidence before "done", honest ticking, repair earliest artifact |
+| `converge` | evidence-based completion, no rounding up to green, verify boundaries, handoff |
+
+The skill was reframed as the **reasoning** layer: it now points at the commands as
+authoritative ("if the skill and a command disagree, the command wins") instead of restating
+the rules — removing the duplication risk.
+
+**Verification — with the skill disabled.** The skill symlink was moved out of
+`~/.agents/skills` entirely and confirmed undiscoverable (`opencode debug skill` → 0 matches).
+`/speckit.specify` then produced `specs/005-admin-audit-logging/spec.md`:
+
+- stated a workflow choice (*"**Workflow**: Full specification — this change introduces
+  security-sensitive…"*)
+- recorded four substantive assumptions, explicitly *"rather than inventing a new identity
+  system"*, deferring extras to Future Work
+- 218 lines carrying all **5** appended sections
+
+So the rules applied from the command alone. The skill was restored and re-confirmed
+discoverable afterwards.
+
+**Gated.** `scripts/self-gate.sh` §3b asserts every command entry is a `prepend`, that each
+contribution carries its specific rules, and that no contribution ships its own frontmatter
+(which would corrupt the command). The E2E asserts all five reached the **materialised**
+commands with frontmatter intact. The gate caught a real mismatch on its first run — a marker
+string that did not match the file's wording.
+
+Preset version 1.1.0 → 1.2.0.
+
 ## Known limitations
 
 - **Pre-marker AGENTS.md content** cannot be auto-replaced. The installer is non-destructive:
