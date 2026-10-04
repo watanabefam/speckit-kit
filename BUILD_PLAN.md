@@ -330,6 +330,42 @@ string that did not match the file's wording.
 
 Preset version 1.1.0 → 1.2.0.
 
+## P2: EARS + correctness properties (feature 001) — implemented (2026-10-04)
+
+Feature 001 was specced, planned and tasked via the loop in this repo, then implemented here.
+
+**What shipped** (preset 1.2.0 → 1.3.0):
+
+| Addendum | Added |
+| --- | --- |
+| `spec-addendum.md` | EARS guidance: the five shapes, `SHALL`-only / RFC 2119 rule, fixed clause order, common misuse, and a language-agnostic guard |
+| `plan-addendum.md` | **Correctness Properties** section: property table (`for any …`), the opt-out rule, a framework-decision record, and a per-ecosystem *detection* table |
+| `tasks-addendum.md` | One property-test task per P-ID, both-ID tracing, co-location, fallback-following, a worked example, and a Property column in Requirement Coverage |
+
+**EARS shapes verified against the canonical source** (Mavin et al., RE'09, and the EARS
+reference): `THE <system> SHALL` (ubiquitous), `WHEN` (event-driven), `WHILE` (state-driven),
+`WHERE` (optional feature), `IF…THEN` (unwanted behaviour), clauses ordered by temporal logic.
+
+**Verification — three artifacts, in a fresh scratch repo:**
+
+| Artifact | Result |
+| --- | --- |
+| `spec.md` | 274 lines, **20 EARS-form requirements** — FR-001 ubiquitous, FR-002–004 event-driven `WHEN…`, correctly patterned |
+| `plan.md` | 344 lines, **Correctness Properties** with substantive `for any …` statements (e.g. P-002: *"for any audit record, the stored actor reference still identifies the action-time actor after that account is renamed or removed"*) and an explicit framework decision |
+| `tasks.md` | 355 lines, test tasks **tracing both P-ID and FR-ID**, with a Property column in the coverage table |
+
+**The framework-agnostic rule held end-to-end.** The plan detected no PBT framework and decided
+`fallback`; the task list then wrote **example-based** tests and said so — it did not invent a
+property framework the plan had rejected. Each still carries its `for any` property statement, so
+the property semantics survive the fallback.
+
+**Gated (self-gate §3c).** Asserts all five EARS shapes, the RFC 2119 rule, the clause-order rule,
+the Correctness Properties section with its opt-out and framework-decision, the property-test task
+rules, and a **no-hardcode guard**: a concrete framework name may appear only inside the plan's
+detection table or on the spec addendum's "do not hardcode" line — never in `tasks-addendum.md`.
+The guard caught a real bug **in the check itself** on first run (a character window spanning line
+boundaries produced a false failure); it was rewritten line-wise.
+
 ## Known limitations
 
 - **Pre-marker AGENTS.md content** cannot be auto-replaced. The installer is non-destructive:

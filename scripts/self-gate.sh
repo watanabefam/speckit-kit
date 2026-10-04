@@ -134,6 +134,76 @@ for f, markers in expected.items():
 sys.exit(0 if ok else 1)
 PY
 
+hdr "3c. EARS + correctness properties (feature 001)"
+python3 - "$ROOT/preset" <<'PY' || fail=1
+import os, re, sys
+base = sys.argv[1]
+ok = True
+def need(cond, msg):
+    global ok
+    if cond: print(f"  ok    {msg}")
+    else:    print(f"  FAIL  {msg}"); ok = False
+
+spec  = open(os.path.join(base, "templates/spec-addendum.md"),  encoding="utf-8").read()
+plan  = open(os.path.join(base, "templates/plan-addendum.md"),  encoding="utf-8").read()
+tasks = open(os.path.join(base, "templates/tasks-addendum.md"), encoding="utf-8").read()
+
+# --- EARS: all five shapes, SHALL-only, fixed clause order (FR-001..FR-005) ---
+need("Requirements Syntax (EARS)" in spec, "spec addendum carries EARS guidance")
+for shape in ("THE <system> SHALL <response>", "WHEN <trigger>",
+              "WHILE <state>", "WHERE <feature is included>", "IF <unwanted condition>"):
+    need(shape in spec, f"EARS shape present: {shape}")
+need("RFC 2119" in spec, "spec addendum states the RFC 2119 keyword rule")
+need(re.search(r"never MUST", spec) is not None, "spec addendum bans MUST")
+need("Clause order is fixed" in spec, "spec addendum states the clause-order rule")
+
+# --- Correctness properties (FR-006, FR-009, FR-012) ---
+need("## Correctness Properties" in plan, "plan addendum has Correctness Properties")
+need("for any" in plan, "plan addendum states the `for any` requirement")
+need("Property ID" in plan, "plan addendum carries the property table")
+need("Non-mapped reason" in plan, "plan addendum carries the opt-out column")
+need("Opt-out rule" in plan, "plan addendum states the opt-out rule")
+need("Framework decision" in plan, "plan addendum records the framework decision")
+need("Detect one; never assume one" in plan, "plan addendum says detect, never assume")
+
+# --- Property-test tasks (FR-007, FR-012) ---
+need("Property-Based Test Tasks" in tasks, "tasks addendum has the property-test rules")
+need("One task per P-ID" in tasks, "tasks addendum states one task per property")
+need("P-xxx" in tasks and "FR-xxx" in tasks, "tasks addendum traces both IDs")
+need("never one of your own choosing" in tasks, "tasks addendum defers the framework to the plan")
+need("Co-locate" in tasks, "tasks addendum states the co-location rule")
+need("| Property |" in tasks, "Requirement Coverage table carries a Property column")
+
+# --- No-hardcode guard (FR-008, SC-003) ---
+# A concrete PBT framework may appear ONLY in the plan's detection table (a table row), or on
+# the spec addendum's "do not hardcode" line. Never in tasks-addendum, never elsewhere.
+# Checked LINE-WISE: a character window around a match crosses line boundaries and produces
+# false failures for mentions that are legitimately allowed.
+FRAMEWORKS = ("Hypothesis", "hypothesis", "fast-check", "jqwik", "quickcheck", "QuickCheck",
+              "proptest", "scalacheck", "ScalaCheck", "PropEr", "StreamData")
+def hits(text):
+    out = []
+    for i, line in enumerate(text.splitlines(), 1):
+        for name in FRAMEWORKS:
+            if name in line:
+                out.append((i, name, line))
+    return out
+
+bad = hits(tasks)
+need(not bad, "tasks addendum names no concrete framework (FR-008)"
+     + (f" - found {[f'{n} @ line {i}' for i, n, _ in bad]}" if bad else ""))
+
+bad = [(i, n, l) for i, n, l in hits(spec) if "hardcode" not in l]
+need(not bad, "spec addendum names a framework only on the 'do not hardcode' line"
+     + (f" - found {[f'{n} @ line {i}' for i, n, _ in bad]}" if bad else ""))
+
+# The detection table is the only place a framework belongs in the plan; its rows start with '|'.
+bad = [(i, n, l) for i, n, l in hits(plan) if not l.lstrip().startswith("|")]
+need(not bad, "plan addendum names frameworks only inside the detection table"
+     + (f" - found {[f'{n} @ line {i}' for i, n, _ in bad]}" if bad else ""))
+sys.exit(0 if ok else 1)
+PY
+
 hdr "4. eval data parses"
 python3 - "$ROOT/evals" <<'PY' || fail=1
 import json, os, sys

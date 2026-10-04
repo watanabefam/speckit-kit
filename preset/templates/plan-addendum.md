@@ -119,6 +119,74 @@ at implementation or typecheck. Enumerate those files here explicitly.
 
 [How the design will be verified once implemented — tests, checks, and manual steps.]
 
+## Correctness Properties
+
+A **correctness property** is a universally-quantified statement about how the system must
+behave — an invariant or contract that holds regardless of the specific data. Example-based tests
+check the examples you thought of; a property is checked against many generated inputs, so it
+finds the cases you did not.
+
+Not every requirement maps cleanly to a property. Map what you can, and **opt out explicitly** for
+the rest — a vacuous property is worse than a recorded opt-out.
+
+| Property ID | Requirement | `for any …` statement | Non-mapped reason | Notes |
+| --- | --- | --- | --- | --- |
+| P-001 | FR-001 | `for any <domain>, <property that must hold>` | — | |
+| — | FR-002 | — | qualitative / no decidable oracle | |
+
+### Rules
+
+- **Start every property with `for any`.** A statement naming specific values is an example, not
+  a property. `for any request carrying an expired token, the response is 401` is a property;
+  `request #5 returns 401` is a test case.
+- **One requirement may yield several properties** (1:many) — split by input domain, not by
+  convenience. Two properties about one requirement are fine; one property pretending to cover
+  two is not.
+- **The statement needs a decidable oracle.** If you cannot say how a run would be judged pass or
+  fail, it is not a property. Requirements that are qualitative, or that depend on
+  non-deterministic or external behaviour with no observable contract, opt out.
+- **Opt-out rule:** a non-mapped requirement gets **no P-ID**, and its reason goes in one line in
+  the `Non-mapped reason` column. Never both a property and an opt-out, and never neither — every
+  requirement is either mapped or explicitly opted out. A requirement that is neither is a gap in
+  this plan.
+
+### Framework decision
+
+Property-based testing needs a framework. **Detect one; never assume one.** Record the decision
+here so `tasks.md` follows it verbatim instead of guessing.
+
+- **Detected** — framework name, or `none found`
+- **Version / where found** — the dependency entry, test config, or existing property test
+- **Signal** — what in the repository indicated it
+- **Decision** — `adopt` the detected framework, or `fallback` to example-based tests
+
+Per-ecosystem signals to look for — a *detection checklist*, not a default. Do not add a
+dependency merely because it appears here.
+
+| Ecosystem | Look for |
+| --- | --- |
+| Python | `hypothesis` in dependencies, or existing `@given` tests |
+| JavaScript / TypeScript | `fast-check` (`fc.assert` / `fc.property`) |
+| JVM | `jqwik`, `junit-quickcheck`, `scalacheck` |
+| Rust | `proptest`, `quickcheck` |
+| Haskell | `QuickCheck` |
+| Erlang / Elixir | `PropEr`, `StreamData` |
+
+If **no framework is found**, decide explicitly between adopting one and falling back to
+example-based tests, and record which. `tasks.md` follows this decision verbatim.
+
+### Traceability
+
+Each property links a requirement to the test that checks it: `FR-xxx → P-xxx → T0xx`. A property
+with no task is unbuilt; a property test with no requirement is scope creep — the same symmetry
+that applies between requirements and tasks.
+
+### Independence
+
+This is template text, so it applies when the command runs — whether or not the
+`spec-driven-development` skill loaded. Under the `lean` preset, which replaces the commands and
+bypasses templates entirely, it does not apply: choose `lean` or this preset, not both.
+
 ## Alternatives Considered
 
 | Option | Advantages | Disadvantages | Decision |

@@ -11,7 +11,7 @@ using Spec Kit's own extension points rather than forking it.
 
 | Component | Mechanism | Purpose |
 | --- | --- | --- |
-| `preset/` | Spec Kit **preset** — `strategy: "append"` on 4 templates **+ `prepend` on 5 commands** | Adds delivery principles and traceability sections to the templates, **and** puts each step's enforceable rules into the command that runs that step |
+| `preset/` | Spec Kit **preset** — `strategy: "append"` on 4 templates **+ `prepend` on 5 commands** | Adds EARS requirements guidance and correctness properties, delivery principles and traceability sections to the templates, **and** puts each step's enforceable rules into the command that runs that step |
 | `skill/spec-driven-development/` | **Agent skill** (agentskills.io) | The *reasoning* layer — why the rules exist and what they prevent. Does not restate them |
 | `global/working-agreements.md` | Global agent rules | Routing only (~25 lines): "this project uses Spec Kit, load the skill" |
 | `bin/speckit-init` | Installer | One command to set a project up |
@@ -23,6 +23,33 @@ using Spec Kit's own extension points rather than forking it.
 Presets default to `replace`, which would mean hand-merging upstream template changes
 forever — the fork problem, one level down. `strategy: "append"` means the core templates
 keep improving underneath and this repo only owns its delta.
+
+## EARS requirements and correctness properties
+
+Specs written with this preset are **executable**, in two layers:
+
+1. **EARS notation** (`spec.md`). Every functional requirement uses one of the five EARS shapes —
+   `THE <system> SHALL …` (ubiquitous), `WHEN` (event), `WHILE` (state), `WHERE` (optional
+   feature), `IF…THEN` (unwanted behaviour) — with `SHALL` as the only normative keyword. EARS
+   constrains prose into shapes a reviewer can write an acceptance check from. (Alistair Mavin
+   et al., RE'09.)
+
+2. **Correctness properties** (`plan.md`). Each testable requirement maps to a
+   universally-quantified property starting `for any …`. Requirements that do not map cleanly
+   get an **explicit opt-out** with a reason — never a vacuous property. Properties trace
+   `FR-xxx → P-xxx → T0xx`, and the tasks template requires one property-based test task per
+   property.
+
+**Framework-agnostic by design.** The preset never hardcodes a PBT framework. `plan.md` holds a
+*detection* step — look for `hypothesis`, `fast-check`, `jqwik`, `proptest`, `QuickCheck`,
+`PropEr` in the target project — and records an explicit `adopt` or `fallback` decision that
+`tasks.md` follows verbatim. A gate assertion enforces that no concrete framework name appears
+in kit-owned normative text outside the one allowlisted detection table and the one "do not
+hardcode" example.
+
+Why this matters: example-based tests only check the cases someone thought of. A property is
+checked against many generated inputs, so it finds the cases nobody did — and it keeps the link
+from requirement to test explicit.
 
 ## Why the rules live in the commands, not only in the skill
 
