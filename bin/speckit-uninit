@@ -1,0 +1,124 @@
+#!/usr/bin/env bash
+# speckit-uninit — reverse what `speckit-init` did to a project.
+#
+# Usage:
+#   speckit-uninit [--dry-run] [--keep-specs] [path]
+#
+# Removes the Spec Kit scaffolding this kit installs:
+#   .specify/            workflow registry, scripts, templates, installed preset
+#   .opencode/commands/  the speckit.* command files (only those)
+#   AGENTS.md            the SPECKIT-BRIDGE block, and the extension's managed block
+#
+# It does NOT touch:
+#   specs/               your feature artifacts (unless --keep-specs is absent AND
+#                        you confirm — see below)
+#   any other file in .opencode/ (your own commands, config, hooks)
+#   your own AGENTS.md content outside the two managed blocks
+#
+# Default is conservative: `specs/` is KEPT, because it is your work, not scaffolding.
+# Pass --remove-specs to delete it too.
+set -euo pipefail
+
+BRIDGE_START="<!-- SPECKIT-BRIDGE START -->"
+BRIDGE_END="<!-- SPECKIT-BRIDGE END -->"
+EXT_START="<!-- SPECKIT START -->"
+EXT_END="<!-- SPECKIT END -->"
+
+DRY=false
+REMOVE_SPECS=false
+TARGET=""
+for arg in "$@"; do
+  case "$arg" in
+    --dry-run)      DRY=true ;;
+    --remove-specs) REMOVE_SPECS=true ;;
+    --help|-h)      sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -*)             echo "error: unknown option '$arg'" >&2; exit 1 ;;
+    *)              TARGET="$arg" ;;
+  esac
+done
+TARGET="${TARGET:-.}"
+[[ -d "$TARGET" ]] || { echo "error: '$TARGET' is not a directory" >&2; exit 1; }
+ROOT="$(cd "$TARGET" && pwd)"
+
+say()  { printf '\033[1;36m::\033[0m %s\n' "$*"; }
+warn() { printf '\033[1;33m!!\033[0m %s\n' "$*" >&2; }
+run()  { if $DRY; then printf '   would: %s\n' "$*"; else eval "$@"; fi; }
+
+[[ -d "$ROOT/.specify" ]] || warn "no .specify/ in $ROOT — nothing looks installed"
+
+# --- 1. AGENTS.md: strip only the two managed blocks ---------------------------
+AGENTS="$ROOT/AGENTS.md"
+if [[ -f "$AGENTS" ]]; then
+  if $DRY; then
+    say "would strip the SPECKIT-BRIDGE and SPECKIT blocks from AGENTS.md"
+  else
+    python3 - "$AGENTS" "$BRIDGE_START" "$BRIDGE_END" "$EXT_START" "$EXT_END" <<'PY'
+import re, sys
+path, bs, be, es, ee = sys.argv[1:6]
+s = open(path, encoding="utf-8").read()
+before = s
+for start, end in ((bs, be), (es, ee)):
+    s = re.sub(re.escape(start) + r".*?" + re.escape(end) + r"\n?", "", s, flags=re.S)
+s = re.sub(r"\n{3,}", "\n\n", s).strip()
+if s:
+    open(path, "w", encoding="utf-8").write(s + "\n")
+    print("   stripped managed blocks from AGENTS.md")
+else:
+    # Nothing of the user's own remained, so the file was ours entirely.
+    import os
+    os.remove(path)
+    print("   AGENTS.md contained only managed blocks — removed")
+PY
+  fi
+fi
+
+# --- 2. .opencode/commands: remove only the speckit.* files --------------------
+CMDS="$ROOT/.opencode/commands"
+if [[ -d "$CMDS" ]]; then
+  n=$(ls -1 "$CMDS"/speckit.*.md 2>/dev/null | wc -l | tr -d ' ')
+  if [[ "$n" != "0" ]]; then
+    say "removing $n speckit.* command file(s) from .opencode/commands/"
+    run "rm -f \"$CMDS\"/speckit.*.md"
+  fi
+  # If the directory is now empty, it was ours; remove it.
+  if ! $DRY && [[ -d "$CMDS" ]] && [[ -z "$(ls -A "$CMDS" 2>/dev/null)" ]]; then
+    rmdir "$CMDS" 2>/dev/null || true
+    rmdir "$ROOT/.opencode" 2>/dev/null || true
+  fi
+fi
+
+# --- 3. .specify/ --------------------------------------------------------------
+if [[ -d "$ROOT/.specify" ]]; then
+  say "removing .specify/"
+  run "rm -rf \"$ROOT/.specify\""
+fi
+
+# --- 4. specs/ (kept by default) ----------------------------------------------
+if [[ -d "$ROOT/specs" ]]; then
+  if $REMOVE_SPECS; then
+    say "removing specs/ (--remove-specs)"
+    run "rm -rf \"$ROOT/specs\""
+  else
+    say "kept specs/ — that is your work, not scaffolding (use --remove-specs to delete)"
+  fi
+fi
+
+# --- 5. backups ----------------------------------------------------------------
+for b in "$ROOT/AGENTS.md.pre-speckit.bak" "$ROOT/.specify/memory/constitution.md.pre-seed.bak"; do
+  [[ -f "$b" ]] && { say "removing backup $(basename "$b")"; run "rm -f \"$b\""; }
+done
+
+if $DRY; then
+  say "dry run — nothing was changed"
+else
+  say "done — $ROOT is back to its pre-Spec-Kit state"
+  cat <<EOF
+
+Review the result:
+  git -C "$ROOT" status
+  git -C "$ROOT" diff
+
+If anything was missed, restore with:
+  git -C "$ROOT" checkout .
+EOF
+fi

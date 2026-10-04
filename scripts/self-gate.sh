@@ -28,6 +28,31 @@ if bash -n "$ROOT/bin/speckit-init"; then
 else
   bad "bin/speckit-init has a syntax error under this bash — on a stock Mac this means the installer does nothing"
 fi
+if bash -n "$ROOT/bin/speckit-uninit"; then
+  ok "bin/speckit-uninit parses"
+else
+  bad "bin/speckit-uninit has a syntax error under this bash"
+fi
+
+hdr "1b. runner hang regression"
+if python3 "$ROOT/evals/test-runner-hang.py" >/dev/null 2>&1; then
+  ok "eval runner respects its timeout and leaves no orphans"
+else
+  bad "eval runner hang regression — run: python3 evals/test-runner-hang.py"
+fi
+
+hdr "1c. changelog + version"
+if [ -f "$ROOT/CHANGELOG.md" ]; then
+  ok "CHANGELOG.md present"
+  _v=$(grep -E '^\s+version:' "$ROOT/preset/preset.yml" | head -1 | sed 's/.*"\(.*\)".*/\1/')
+  if grep -q "## \[$_v\]" "$ROOT/CHANGELOG.md"; then
+    ok "CHANGELOG has an entry for the current preset version ($_v)"
+  else
+    bad "CHANGELOG has no entry for preset version $_v"
+  fi
+else
+  bad "CHANGELOG.md missing"
+fi
 
 hdr "2. skill frontmatter"
 python3 - "$ROOT/skill/spec-driven-development" <<'PY' || fail=1
@@ -276,6 +301,32 @@ if [ "$E2E" = "1" ]; then
     check_cmd tasks     "traces to a requirement"
     check_cmd implement "Evidence before"
     check_cmd converge  "Completion requires evidence"
+    # Reversibility: uninit must restore the repo to its pre-install state, and must
+    # preserve the user's own AGENTS.md content. Asserted on a scratch repo with a
+    # pre-existing AGENTS.md, because that is the case that can silently lose data.
+    if [ -x "$ROOT/bin/speckit-uninit" ]; then
+      U="$(mktemp -d)"
+      git init -q "$U"
+      printf '# scratch\n' > "$U/README.md"
+      printf '# My own notes\n\nKeep me.\n' > "$U/AGENTS.md"
+      ( cd "$U" && git add -A && git -c user.email=e@e -c user.name=e commit -qm init )
+      "$ROOT/bin/speckit-init" "$U" >/dev/null 2>&1 || true
+      "$ROOT/bin/speckit-uninit" "$U" >/dev/null 2>&1 || true
+      if [ -d "$U/.specify" ]; then bad "uninit left .specify/ behind"; else ok "uninit removed .specify/"; fi
+      if [ -f "$U/AGENTS.md" ] && grep -q "Keep me." "$U/AGENTS.md"; then
+        ok "uninit preserved the user's own AGENTS.md content"
+      else
+        bad "uninit lost the user's own AGENTS.md content"
+      fi
+      if [ -z "$(git -C "$U" status --porcelain)" ]; then
+        ok "uninit restored the repo to its pre-install state (git clean)"
+      else
+        bad "uninit left the repo dirty: $(git -C "$U" status --porcelain | head -3 | tr '\n' ' ')"
+      fi
+      rm -rf "$U"
+    else
+      bad "bin/speckit-uninit missing or not executable"
+    fi
     for m in "SPECKIT-BRIDGE START" "SPECKIT-BRIDGE END" "<!-- SPECKIT START -->" "<!-- SPECKIT END -->"; do
       c=$(grep -c "$m" AGENTS.md 2>/dev/null || true)
       if [ "$c" = "1" ]; then ok "marker once: $m"; else bad "marker $m appears $c times"; fi

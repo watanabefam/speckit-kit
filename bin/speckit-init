@@ -79,20 +79,30 @@ fi
 
 cd "$ROOT"
 
-# --- 3. Preset (append-style template addenda) --------------------------------
+# --- 3. Preset (template addenda + command contributions) ---------------------
+# Uses `preset update` when the preset is already installed — that is the idiomatic
+# replace flow (remove + add), and it is what keeps an existing project current.
 if [[ -d "$PRESET_DIR" ]]; then
+  SRC_VERSION="$(grep -E '^\s+version:' "$PRESET_DIR/preset.yml" 2>/dev/null | head -1 | sed 's/.*"\(.*\)".*/\1/')"
   PLIST="$(specify preset list 2>/dev/null || true)"
   if grep -q "$PRESET_ID" <<<"$PLIST"; then
-    # `preset add` refuses to reinstall an installed id, so remove first.
-    specify preset remove "$PRESET_ID" >/dev/null 2>&1 || true
-  fi
-  if specify preset add --dev "$PRESET_DIR" >/dev/null 2>&1; then
-    say "installed preset: $PRESET_ID (template addenda, append strategy)"
+    INST_VERSION="$(specify preset info "$PRESET_ID" 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g' | grep -E '^\s+Version:' | head -1 | awk '{print $2}')"
+    if specify preset update "$PRESET_ID" --dev "$PRESET_DIR" >/dev/null 2>&1; then
+      if [[ -n "$INST_VERSION" && "$INST_VERSION" != "$SRC_VERSION" ]]; then
+        say "updated preset: $PRESET_ID $INST_VERSION -> $SRC_VERSION"
+      else
+        say "preset up to date: $PRESET_ID v$SRC_VERSION"
+      fi
+    else
+      die "could not update preset — retry: specify preset update $PRESET_ID --dev \"$PRESET_DIR\""
+    fi
+  elif specify preset add --dev "$PRESET_DIR" >/dev/null 2>&1; then
+    say "installed preset: $PRESET_ID v$SRC_VERSION (template addenda + command rules)"
   else
-    warn "could not install preset — retry: specify preset add --dev \"$PRESET_DIR\""
+    die "could not install preset — retry: specify preset add --dev \"$PRESET_DIR\""
   fi
 else
-  warn "preset directory not found at $PRESET_DIR — skipping (template addenda not applied)"
+  die "preset directory not found at $PRESET_DIR — cannot install the template addenda or command rules"
 fi
 
 # --- 4. agent-context extension, pointed at AGENTS.md -------------------------
@@ -105,7 +115,10 @@ if grep -q 'agent-context' <<<"$EXT_LIST"; then
 elif specify extension add agent-context >/dev/null 2>&1; then
   say "installed agent-context extension"
 else
-  warn "could not install agent-context extension — retry: specify extension add agent-context"
+  # Fail loudly. A half-installed project that looks fine is worse than a failed
+  # install: the AGENTS.md anchor is what keeps the context file maintained, and
+  # silently skipping it produces a project that appears set up but is not.
+  die "could not install the agent-context extension — retry: specify extension add agent-context"
 fi
 
 CFG=".specify/extensions/agent-context/agent-context-config.yml"
@@ -128,8 +141,10 @@ PY
   then
     say "agent context anchored to AGENTS.md"
   else
-    warn "could not anchor agent context to AGENTS.md — set context_files in $CFG by hand"
+    die "could not anchor agent context to AGENTS.md — set context_files in $CFG by hand"
   fi
+else
+  die "agent-context config not found at $CFG — the extension did not install correctly"
 fi
 
 # --- 5. Optional bundled extensions -------------------------------------------
@@ -142,7 +157,8 @@ for pair in "bug:$WITH_BUG" "assess:$WITH_ASSESS"; do
   elif specify extension add "$name" >/dev/null 2>&1; then
     say "installed $name extension"
   else
-    warn "could not install $name extension — retry: specify extension add $name"
+    # Explicitly requested, so a failure is an error, not a warning.
+    die "could not install the $name extension — retry: specify extension add $name"
   fi
 done
 

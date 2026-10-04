@@ -146,6 +146,41 @@ speckit-init --with-bug --with-assess ~/path/to/project
 Then run `/speckit.constitution` as the first step of the loop — that is what applies the
 delivery principles.
 
+## Upgrading, and reversing
+
+**Upgrade an existing project** — re-run the installer. It detects the installed preset and uses
+`specify preset update` (the idiomatic remove+add flow), reporting the version change:
+
+```bash
+speckit-init ~/path/to/project
+# :: preset up to date: spec-driven-development v1.3.0
+# :: updated preset: spec-driven-development 1.2.0 -> 1.3.0
+```
+
+Because the preset is installed from a local directory (`--dev`), an upgrade picks up whatever is
+in `preset/` at that moment. `git pull` this repo, then re-run `speckit-init` per project.
+
+**Check what a project has** — `specify preset info spec-driven-development` reports the installed
+version, so drift across projects is visible.
+
+**Reverse it** — `speckit-uninit` removes the scaffolding and nothing else:
+
+```bash
+speckit-uninit --dry-run ~/path/to/project   # show what would happen
+speckit-uninit ~/path/to/project
+```
+
+It removes `.specify/`, the `speckit.*` command files, and the two managed blocks in `AGENTS.md`.
+It **preserves your own `AGENTS.md` content** and **keeps `specs/`** (your work, not scaffolding —
+pass `--remove-specs` to delete it too). Verified: on a repo with a pre-existing `AGENTS.md`,
+uninit leaves `git status` clean.
+
+## Versioning
+
+The preset follows [Semantic Versioning](https://semver.org/); changes are recorded in
+[`CHANGELOG.md`](CHANGELOG.md). The self-gate fails if the current preset version has no changelog
+entry.
+
 ## Design notes
 
 **Symlinks, not URLs.** opencode can fetch remote instruction files, but the fetch is
@@ -196,13 +231,15 @@ See `BUILD_PLAN.md` for the research and decisions behind the structure.
 ## Layout
 
 ```
-bin/speckit-init                  installer
-preset/                           spec-kit preset (append strategy, 4 targets)
+bin/speckit-init                  installer (idempotent; uses `preset update`)
+bin/speckit-uninit                reverse it (preserves your own content)
+preset/                           spec-kit preset (append ×4, prepend ×5)
 skill/spec-driven-development/    agent skill + references
 global/working-agreements.md      global routing rules
-evals/                            behaviour + trigger-accuracy evals, and two runners
+evals/                            behaviour + trigger evals, two runners, hang regression test
 scripts/self-gate.sh              the kit's own gate
 .github/workflows/self-gate.yml   runs that gate on Linux and macOS
+CHANGELOG.md                      version history
 BUILD_PLAN.md                     how this was built + the research behind it
 ```
 

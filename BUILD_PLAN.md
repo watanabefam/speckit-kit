@@ -366,6 +366,39 @@ detection table or on the spec addendum's "do not hardcode" line — never in `t
 The guard caught a real bug **in the check itself** on first run (a character window spanning line
 boundaries produced a false failure); it was rewritten line-wise.
 
+## P3 + P4: lifecycle and robustness (2026-10-04)
+
+### P3 — lifecycle
+
+| Item | What |
+| --- | --- |
+| `preset update` | `speckit-init` now uses `specify preset update <id> --dev <path>` when the preset is already installed — the idiomatic remove+add flow — instead of remove-then-add by hand. Reports the version transition. |
+| Drift check | `specify preset info <id>` reports the installed version; the installer compares it against `preset/preset.yml` and prints `up to date` or `X -> Y`. |
+| `CHANGELOG.md` | Keep a Changelog format, backfilled to 1.0.0. The self-gate **fails if the current preset version has no changelog entry**. |
+| Upgrade path | Documented in the README: `git pull` the kit, re-run `speckit-init` per project. |
+
+### P4 — robustness
+
+| Item | What |
+| --- | --- |
+| **Fail loudly** | Preset install, `agent-context` install, the AGENTS.md anchor, and explicitly-requested extensions (`--with-bug`/`--with-assess`) now `die` on failure instead of warning. A half-installed project that looks fine is worse than a failed install. This is a deliberate deviation from spec-kit's own "warning, not failure" idiom, which is written for *dependencies* — here it is the thing being installed. |
+| **`speckit-uninit`** | Reverses the install. Removes `.specify/`, the `speckit.*` commands, and the two managed `AGENTS.md` blocks. **Preserves the user's own `AGENTS.md` content** and **keeps `specs/`** by default. `--dry-run` supported. |
+| **Hang regression test** | `evals/test-runner-hang.py` — a fake `opencode` on PATH, no model or network needed. Asserts three properties: a silent run respects its timeout, a fired run returns promptly without waiting for the process to finish, and neither leaves an orphaned child. Runs in the gate on every push. |
+
+**Verified.**
+
+- `preset update` path: re-running the installer on an installed project prints
+  `preset up to date: spec-driven-development v1.3.0`.
+- `speckit-uninit`: on a scratch repo with a pre-existing `AGENTS.md`, it removed `.specify/`,
+  `.opencode/` and the backup, **kept the user's own content verbatim** (`# My own notes / Keep
+  me.`), and left `git status` **clean** — byte-identical to the pre-install state.
+- Hang regression: silent run returned in 5.0s for a 5s timeout; fired run returned in 0.4s
+  rather than waiting for a 600s tail; no orphaned children.
+
+**Gated.** §1 asserts both installers parse under the running bash; §1b runs the hang regression;
+§1c asserts the changelog covers the current version; the E2E asserts uninit removes `.specify/`,
+preserves user content, and leaves git clean.
+
 ## Known limitations
 
 - **Pre-marker AGENTS.md content** cannot be auto-replaced. The installer is non-destructive:
