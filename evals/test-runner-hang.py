@@ -21,7 +21,9 @@ Exit:   0 = pass, 1 = fail
 """
 from __future__ import annotations
 
+import contextlib
 import importlib.util
+import io
 import os
 import shutil
 import subprocess
@@ -67,6 +69,73 @@ def children_of(pid: int) -> list[int]:
         return [int(x) for x in out.split()]
     except Exception:
         return []
+
+
+def test_scoring() -> None:
+    """Assert the reported rate is per-query, not cumulative across the set.
+
+    Regression: `counted` was initialised once per group instead of per query, so the
+    denominators ran 3, 6, 9, 12, 14... and every verdict after the first query was
+    nonsense ("0/6 fired" after three runs). It type-checked, ran clean, and was only
+    caught by reading the output.
+
+    This drives main() end-to-end against a fake `opencode` with a scripted marker
+    pattern, so the arithmetic is checked, not just the syntax.
+    """
+    import json
+    import tempfile as tf
+
+    tmp = tf.mkdtemp(prefix="scoring-")
+    bindir = Path(tmp, "bin")
+    bindir.mkdir()
+    # Fires only for the FIRST query; every later query must score on its own runs.
+    fake = bindir / "opencode"
+    fake.write_text(
+        "#!/usr/bin/env python3\n"
+        "import os, sys\n"
+        "q = sys.argv[-1]\n"
+        "if 'FIRST' in q:\n"
+        "    sys.stdout.write('Skill \"spec-driven-development\"\\n')\n"
+        "else:\n"
+        "    sys.stdout.write('nothing here\\n')\n"
+        "sys.stdout.flush()\n"
+    )
+    fake.chmod(0o755)
+    ev = Path(tmp, "trigger-evals.json")
+    ev.write_text(json.dumps({
+        "skill": "spec-driven-development",
+        "should_trigger": [
+            {"id": "st-A", "context": "plain", "query": "FIRST"},
+            {"id": "st-B", "context": "plain", "query": "SECOND"},
+            {"id": "st-C", "context": "plain", "query": "THIRD"},
+        ],
+        "should_not_trigger": [],
+    }))
+
+    rte = load_runner()
+    old_path, old_eval = os.environ.get("PATH", ""), rte.EVALS
+    os.environ["PATH"] = f"{bindir}:{old_path}"
+    rte.EVALS = ev
+    sys.argv = ["rte", "--runs", "3", "--only", "st", "--timeout", "20"]
+    buf = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(buf):
+            rte.main()
+    finally:
+        os.environ["PATH"] = old_path
+        rte.EVALS = old_eval
+        shutil.rmtree(tmp, ignore_errors=True)
+
+    # Assert the denominators are 3 each, not cumulative (3, 6, 9, ...).
+    expect = {"st-A": "3/3", "st-B": "0/3", "st-C": "0/3"}
+    for qid, frac in expect.items():
+        line = next((l for l in buf.getvalue().splitlines()
+                     if l.strip().startswith(("ok " + qid, "XX " + qid))), "")
+        if f" {frac} fired " not in line:
+            raise AssertionError(f"{qid}: expected '{frac} fired' per-query denominator, got: {line.strip()}")
+    if "1/3 queries correct" not in buf.getvalue():
+        raise AssertionError("summary should read 1/3 queries correct")
+    print("  ok    per-query scoring: denominators are 3/3, 0/3, 0/3 (not cumulative)")
 
 
 def main() -> int:
@@ -135,6 +204,7 @@ def main() -> int:
             print(f"FAIL  {f}")
         print("RUNNER-HANG: FAIL")
         return 1
+    test_scoring()
     print("RUNNER-HANG: PASS")
     return 0
 

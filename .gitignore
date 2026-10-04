@@ -6,3 +6,7 @@
 
 # Spec Kit catalog cache is machine-local (also ignored inside .specify/)
 .specify/extensions/.cache/
+
+# Python bytecode from the eval tooling
+__pycache__/
+*.pyc

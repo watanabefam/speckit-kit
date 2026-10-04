@@ -1,6 +1,6 @@
 ---
 name: spec-driven-development
-description: Use this skill for any software change in a repository that uses Spec Kit (one containing a .specify/ directory) - new features, bug fixes, refactors, migrations, maintenance, dependency and documentation updates - and when deciding how much process a request warrants. Also use when assessing whether an idea is worth building. Covers workflow selection proportional to risk, approval gates, requirement traceability, handoff discipline, contradiction repair, scope control, and evidence-based completion.
+description: Use this skill for software work in a repository that contains a .specify/ directory (the Spec Kit marker). Applies to new features, bug fixes, refactors, migrations, maintenance, dependency and documentation updates; to diagnosing an unknown cause before fixing, such as a performance regression, slow build, or flaky or intermittent failure; to refactors spanning several call sites or changing a public contract; and to deciding how much process a request warrants. Covers workflow selection proportional to risk, approval gates, requirement traceability, handoff discipline, contradiction repair, scope control, and evidence-based completion.
 license: MIT
 metadata:
   category: development

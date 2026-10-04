@@ -159,21 +159,27 @@ def main() -> int:
     ap.add_argument("--threshold", type=float, default=0.5, help="trigger verdict at this fire-rate (0.5 = 2/3)")
     ap.add_argument("--model")
     ap.add_argument("--only", choices=["st", "snt"])
-    ap.add_argument("--timeout", type=int, default=150,
-                    help="per-run cap; the trigger decision is early, so this only bounds silent runs")
+    ap.add_argument("--only-ids", help="comma-separated query ids, e.g. st-06,st-08. "
+                    "Use when re-testing a description fix on just the queries that missed.")
+    ap.add_argument("--timeout", type=int, default=300,
+                    help="per-run cap. It only bounds runs that never emit the marker; "
+                         "too low and slow models get wrongly scored as misses.")
     ap.add_argument("--dry-run", action="store_true")
     a = ap.parse_args()
 
     spec = json.loads(EVALS.read_text())
     groups = [("should_trigger", "st"), ("should_not_trigger", "snt")]
+    keep = {s.strip() for s in a.only_ids.split(",")} if a.only_ids else None
 
     if a.dry_run:
-        for group, tag in groups:
-            if a.only and a.only != tag:
-                continue
-            for q in spec[group]:
-                print(f"{q['id']:8} [{q['context']:8}] {q['query']}")
-        return 0
+            for group, tag in groups:
+                if a.only and a.only != tag:
+                    continue
+                for q in spec[group]:
+                    if keep and q["id"] not in keep:
+                        continue
+                    print(f"{q['id']:8} [{q['context']:8}] {q['query']}")
+            return 0
 
     if a.runs < 2:
         print("!! NOTE: --runs 1 is not a measurement. A single run cannot distinguish a\n"
@@ -205,33 +211,56 @@ def main() -> int:
             want = group == "should_trigger"
             print(f"== {'should trigger' if want else 'should NOT trigger'} ==")
             passed = 0
+            n_timeouts = 0
+            judged_queries = 0
             for q in spec[group]:
-                fired = runs = 0
+                if keep and q["id"] not in keep:
+                    continue
+                judged_queries += 1
+                fired = counted = 0
                 for i in range(a.runs):
-                    runs += 1
                     hit, secs, timed_out = run(cmd_base + [q["query"]], dirs[q["context"]], a.timeout)
+                    if timed_out:
+                        # A timeout is NOT evidence the skill did not load. The model may
+                        # simply be slow. Counting it as "silent" conflates slow with missed
+                        # and silently understates the trigger rate -- it did exactly that
+                        # before this was fixed. Excluded from the verdict, reported loudly.
+                        n_timeouts += 1
+                        print(f"     {q['id']} run {i+1}/{a.runs} "
+                              f"{'fired ' if hit else 'timeout'} ({secs:.0f}s) (TIMED OUT - excluded)")
+                        continue
                     fired += hit
-                    note = " (timed out -> counted as silent)" if timed_out else ""
+                    counted += 1
                     print(f"     {q['id']} run {i+1}/{a.runs} "
-                          f"{'fired ' if hit else 'silent'} ({secs:.0f}s){note}")
-                triggered = (fired / runs) >= a.threshold
+                          f"{'fired ' if hit else 'silent'} ({secs:.0f}s)")
+                if counted == 0:
+                    print(f"  ?? {q['id']} [{q['context']:8}] all {a.runs} runs timed out "
+                          f"- raise --timeout to judge this query")
+                    continue
+                rate = fired / counted
+                triggered = rate >= a.threshold
                 ok = triggered == want
                 passed += ok
                 mark = "ok" if ok else "XX"
-                print(f"  {mark} {q['id']} [{q['context']:8}] {fired}/{runs} fired -> "
-                      f"{'triggers' if triggered else 'silent'}  {q['query'][:48]}")
+                print(f"  {mark} {q['id']} [{q['context']:8}] {fired}/{counted} fired "
+                      f"({rate:.0%}) -> {'triggers' if triggered else 'silent'}  {q['query'][:44]}")
                 if not ok and want:
-                    print(f"       MISSED: should have triggered")
+                    print("       MISSED: should have triggered")
                 if not ok and not want:
                     print(f"       FALSE TRIGGER: {q.get('why','')}")
-            summary[group] = (passed, len(spec[group]))
-            print(f"  -> {passed}/{len(spec[group])} queries correct\n")
+            total = judged_queries
+            summary[group] = (passed, total)
+            print(f"  -> {passed}/{total} queries correct\n")
 
         print("=" * 60)
         for group, (p, t) in summary.items():
             label = "should trigger" if group == "should_trigger" else "should NOT trigger"
             print(f"  {label:20} {p}/{t}  ({p/t*100:.0f}%)")
-        good = all(p == t for p, t in summary.values())
+        if n_timeouts:
+            print(f"\n  WARNING: {n_timeouts} run(s) timed out at --timeout {a.timeout}s and were"
+                  "\n           EXCLUDED from the scores above, not counted as misses."
+                  "\n           Re-run with a higher --timeout before quoting a number.")
+        good = all(p == t for p, t in summary.values()) and n_timeouts == 0
         if not good:
             print("\n  FAIL - see failures above.")
         else:
