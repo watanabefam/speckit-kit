@@ -1,29 +1,54 @@
 # Quickstart — for AI assistants
 
-**You are reading this because someone asked you to set up spec-driven development.** Everything you
-need is below. Do not ask them anything technical.
+**You are reading this because someone asked you to set up spec-driven development, and you have
+just been given this repo.** Everything you need is below. Do not ask them anything technical.
 
-## Do this
+Your goal: the project directory ends up with a working `/speckit` command, and the user knows
+which command to run next.
+
+## Bootstrap
+
+Run these in order. Each step prints whether it was already present, so **re-running is safe**.
+
+**1. Make sure the Spec Kit CLI is available.**
 
 ```bash
-~/.local/bin/speckit-init .
+command -v specify >/dev/null 2>&1 || specify --version
 ```
 
-That is the whole setup. It installs Spec Kit, the project's rules, and the `/speckit` entry point.
+If that fails, install it (prefer `uv`; fall back to `pipx`):
 
-Then say this to the user, verbatim:
+```bash
+command -v uv >/dev/null 2>&1 && uv tool install "specify-cli==1.0.13" \
+  || pipx install "specify-cli==1.0.13"
+```
+
+**2. Install the kit's commands into the current project.**
+
+```bash
+# Replace with the real path to this repo if it is not already your working directory.
+KIT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+"$KIT/bin/speckit-init" .
+```
+
+That single command installs Spec Kit, the project's rules, and the `/speckit` entry point.
+
+**3. Confirm it worked** — all three must be present:
+
+```bash
+test -f .opencode/commands/speckit.md && echo "ok: /speckit"
+test -f .opencode/commands/speckit.constitution.md && echo "ok: /speckit.constitution"
+test -d .specify/presets/spec-driven-development && echo "ok: rules preset"
+```
+
+If any line is missing, report it and stop. Do **not** hand-edit anything under `.specify/` or
+`.opencode/commands/` — those files are generated and edits get overwritten.
+
+## Then tell the user this, verbatim
 
 > Done. Run `/speckit.constitution` once — it writes the project's delivery principles. After that,
 > run `/speckit` and describe what you want to build; it picks the right workflow and walks you
 > through it.
-
-## If `~/.local/bin/speckit-init` is not found
-
-Try `speckit-init .` (it may be on `PATH`). If that also fails, the kit is not installed on this
-machine — tell the user, and stop. Do not hand-edit anything in `.specify/` or
-`.opencode/commands/`: those files are generated and your edits will be overwritten.
-
-The command is safe to re-run. It detects what is already installed and updates only what changed.
 
 ## The two commands that matter
 
@@ -39,6 +64,17 @@ is reached *through* `/speckit`. You rarely need to invoke them directly.
 
 That is a normal starting point. `/speckit` also answers "should I even build this?" — run it and
 describe the idea.
+
+## If you are setting this up from a URL rather than a clone
+
+If you were given a link and not a directory, clone it first:
+
+```bash
+git clone https://github.com/watanabefam/speckit-kit.git
+```
+
+then point step 2 at that clone. Do not try to reconstruct the setup from memory — the files are
+authoritative.
 
 ## What you just set up, in one paragraph
 
