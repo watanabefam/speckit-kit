@@ -75,10 +75,10 @@ fi
 # --- 2. .opencode/commands: remove only the speckit.* files --------------------
 CMDS="$ROOT/.opencode/commands"
 if [[ -d "$CMDS" ]]; then
-  n=$(ls -1 "$CMDS"/speckit.*.md 2>/dev/null | wc -l | tr -d ' ')
+  n=$(ls -1 "$CMDS"/speckit*.md 2>/dev/null | wc -l | tr -d ' ')
   if [[ "$n" != "0" ]]; then
     say "removing $n speckit.* command file(s) from .opencode/commands/"
-    run "rm -f \"$CMDS\"/speckit.*.md"
+    run "rm -f \"$CMDS\"/speckit*.md"
   fi
   # If the directory is now empty, it was ours; remove it.
   if ! $DRY && [[ -d "$CMDS" ]] && [[ -z "$(ls -A "$CMDS" 2>/dev/null)" ]]; then

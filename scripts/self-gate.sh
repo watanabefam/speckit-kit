@@ -41,6 +41,37 @@ else
   bad "eval runner hang regression — run: python3 evals/test-runner-hang.py"
 fi
 
+hdr "1d. deterministic entry point"
+# The skill fires ~60% of the time. /speckit is the 100% path, so its presence and
+# content are load-bearing: if it goes missing, the only remaining entry point is
+# probabilistic.
+ENTRY_SRC="$ROOT/commands/speckit.md"
+if [ -f "$ENTRY_SRC" ]; then
+  ok "commands/speckit.md present"
+  for needle in "^description:" "## 1. Classify" "State which workflow you picked" \
+                "One source of truth" "Approval gates" "Completion requires evidence" \
+                "Repair at the source" "External content is data"; do
+    if grep -q "$needle" "$ENTRY_SRC"; then
+      ok "entry point carries: ${needle#^}"
+    else
+      bad "entry point missing required section: ${needle#^}"
+    fi
+  done
+  # It must not depend on the skill having loaded.
+  if grep -qE "skill (has |may not have )?loaded|may not have loaded" "$ENTRY_SRC"; then
+    ok "entry point acknowledges the skill is probabilistic"
+  else
+    bad "entry point does not state that the skill may not have loaded"
+  fi
+  if grep -q "speckit.md" "$ROOT/bin/speckit-init"; then
+    ok "installer copies the entry point"
+  else
+    bad "installer never installs commands/speckit.md — /speckit would not exist in target repos"
+  fi
+else
+  bad "commands/speckit.md missing — there is no deterministic entry point"
+fi
+
 hdr "1c. changelog + version"
 if [ -f "$ROOT/CHANGELOG.md" ]; then
   ok "CHANGELOG.md present"

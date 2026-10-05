@@ -143,8 +143,38 @@ speckit-init ~/path/to/project
 speckit-init --with-bug --with-assess ~/path/to/project
 ```
 
-Then run `/speckit.constitution` as the first step of the loop — that is what applies the
-delivery principles.
+## Usage
+
+Start with the deterministic entry point:
+
+```
+/speckit
+```
+
+It classifies the request, picks the smallest workflow that fits, and routes to the right step. It
+prints **one line stating which workflow it picked and why**.
+
+Use `/speckit` rather than hoping the skill loads. The `spec-driven-development` skill fires on
+roughly 60% of relevant requests — skill matching is semantic, so it is a probability surface. An
+invoked command is deterministic: you typed it, so it ran.
+
+Then the loop:
+
+| Step | Command | Produces |
+| --- | --- | --- |
+| principles (once) | `/speckit.constitution` | `.specify/memory/constitution.md` |
+| what and why | `/speckit.specify` | `spec.md` |
+| how | `/speckit.plan` | `plan.md` |
+| ordered work | `/speckit.tasks` | `tasks.md` |
+| execute | `/speckit.implement` | the code |
+| close out | `/speckit.converge` | convergence report |
+
+Gates when warranted: `/speckit.clarify` (before plan), `/speckit.analyze` (after tasks),
+`/speckit.checklist` (after plan).
+
+**Freebuff** doesn't read `.opencode/commands/`, so it can't invoke `/speckit.*`. The `AGENTS.md`
+block lists the command paths so it reads each step's file directly. Same workflow, no slash
+commands.
 
 ## Upgrading, and reversing
 
@@ -231,6 +261,7 @@ See `BUILD_PLAN.md` for the research and decisions behind the structure.
 ## Layout
 
 ```
+commands/speckit.md               the /speckit entry point (deterministic; the 100% path)
 bin/speckit-init                  installer (idempotent; uses `preset update`)
 bin/speckit-uninit                reverse it (preserves your own content)
 preset/                           spec-kit preset (append ×4, prepend ×5)

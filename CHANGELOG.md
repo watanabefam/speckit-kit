@@ -8,6 +8,14 @@ The preset version lives in `preset/preset.yml` and is what `specify preset info
 ## [Unreleased]
 
 ### Added
+- **`/speckit` — a deterministic entry point.** `commands/speckit.md`, copied into
+  `.opencode/commands/` by the installer. Invoking it classifies the request, picks the smallest
+  workflow that fits, and routes to the right step. This is the **100% path**: the skill fires on
+  ~60% of relevant requests, an invoked command fires every time. The command carries the
+  non-negotiables inline (single source of truth, approval gates, scope control, repair-at-source,
+  external-content-as-data, evidence before done, handoff) so they hold without the skill loading.
+- Self-gate §1d: asserts the entry point exists, carries each required section, states that the
+  skill may not have loaded, and that the installer actually copies it.
 - `--only-ids` on `evals/run-trigger-evals.py`, so a description fix can be re-tested on just the
   queries that missed instead of paying for the whole set.
 
@@ -17,11 +25,23 @@ The preset version lives in `preset/preset.yml` and is what `specify preset info
   — it made `st-08` look like a miss when it was only slow. Timeouts are now **excluded from the
   verdict**, counted separately, and reported as a `WARNING` that makes the run non-zero-exit, so a
   number can never be quoted from a timeout-contaminated sample. The default cap is 300s (was 150s).
+- **Per-query scoring.** `counted` was hoisted out of the per-query loop, so denominators ran
+  3, 6, 9, 12… and every verdict after the first query was nonsense ("0/6 fired" after three runs).
+  It type-checked and ran clean; only reading the output caught it. `--only-ids` also reported
+  `len(--only-ids)` as the denominator for *both* groups. Both fixed, both now gated.
+- `speckit-uninit` did not remove `.opencode/commands/speckit.md`, because its glob was
+  `speckit.*.md` and the entry point has no second dot. Left the repo dirty.
 - The skill description no longer enumerates the *negative* case. See below.
 
 ### Changed
 - Skill description rewritten to be short, positive, and free of negative-case vocabulary
   (506 → 646 chars). See "Findings" below — the previous attempt made things measurably worse.
+- The `AGENTS.md` bridge now names `/speckit` as the preferred entry point and says why.
+
+### Known constraint
+- **A preset cannot create a command.** Verified: a `provides.commands` entry naming a command that
+  does not exist in core is silently ignored. Presets can only `prepend` to existing commands.
+  This is why `/speckit` is copied by `speckit-init` rather than declared in `preset.yml`.
 
 ## Findings: skill descriptions are positive-only, short, and probabilistic
 

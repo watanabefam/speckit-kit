@@ -79,6 +79,29 @@ fi
 
 cd "$ROOT"
 
+# --- 2b. Deterministic entry-point command -------------------------------------
+# A preset can only `prepend` to commands that already exist — it cannot create one
+# (verified: a preset entry naming a new command is silently ignored). So /speckit is
+# copied here instead.
+#
+# Why it exists: the `spec-driven-development` skill loads on roughly 60% of relevant
+# requests. Skill matching is semantic, so the skill is a probability surface — fine
+# for reasoning, wrong for anything that must always apply. An invoked command is
+# deterministic: the user typed it, so it ran. This gives the workflow a 100% entry
+# point without making the skill do enforcement work.
+ENTRY="$ROOT/.opencode/commands/speckit.md"
+ENTRY_SRC="$KIT_ROOT/commands/speckit.md"
+if [[ -f "$ENTRY_SRC" ]]; then
+  if [[ -f "$ENTRY" ]] && cmp -s "$ENTRY_SRC" "$ENTRY"; then
+    say "/speckit entry point already current"
+  else
+    cp "$ENTRY_SRC" "$ENTRY"
+    say "installed /speckit entry point (deterministic workflow entry)"
+  fi
+else
+  die "entry-point source missing at $ENTRY_SRC"
+fi
+
 # --- 3. Preset (template addenda + command contributions) ---------------------
 # Uses `preset update` when the preset is already installed — that is the idiomatic
 # replace flow (remove + add), and it is what keeps an existing project current.
@@ -175,6 +198,10 @@ artifacts under `specs/` are the source of truth.
 **Load the `spec-driven-development` skill before specifying, planning, or implementing.**
 It carries the workflow, approval gates, traceability and verification rules.
 
+**Prefer `/speckit`.** It is the deterministic entry point: it classifies the request, picks the
+smallest workflow that fits, and routes to the right step. The skill above loads on roughly 60% of
+relevant requests — invoke `/speckit` when you need the workflow to apply for certain.
+
 ## If you cannot invoke `/speckit.*` commands
 
 Agents that do not read `.opencode/commands/` (e.g. Freebuff/Codebuff) can run each step by
@@ -182,6 +209,7 @@ reading the command prompt directly and following it as instructions:
 
 | Step | File |
 | --- | --- |
+| entry point | `.opencode/commands/speckit.md` |
 | constitution | `.opencode/commands/speckit.constitution.md` |
 | specify | `.opencode/commands/speckit.specify.md` |
 | plan | `.opencode/commands/speckit.plan.md` |
