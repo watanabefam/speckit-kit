@@ -3,6 +3,9 @@
 A reusable upgrade layer for [GitHub Spec Kit](https://github.com/github/spec-kit),
 wired for **opencode** and **Freebuff/Codebuff**.
 
+> **Not an expert, or using an AI assistant?** Give it this file and let it set everything up:
+> [`QUICKSTART.md`](QUICKSTART.md) — one command, verified to work unattended.
+
 Spec Kit is deliberately minimal: its core templates are generic, and it installs no
 extensions by default. This repo adds the parts worth having consistently across projects,
 using Spec Kit's own extension points rather than forking it.
@@ -261,6 +264,7 @@ See `BUILD_PLAN.md` for the research and decisions behind the structure.
 ## Layout
 
 ```
+QUICKSTART.md                   paste-to-your-AI setup; one command, verified unattended
 commands/speckit.md               the /speckit entry point (deterministic; the 100% path)
 bin/speckit-init                  installer (idempotent; uses `preset update`)
 bin/speckit-uninit                reverse it (preserves your own content)

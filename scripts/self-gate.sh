@@ -72,6 +72,31 @@ else
   bad "commands/speckit.md missing — there is no deterministic entry point"
 fi
 
+hdr "1e. novice quickstart"
+QS="$ROOT/QUICKSTART.md"
+if [ -f "$QS" ]; then
+  ok "QUICKSTART.md present"
+  # The whole point is that it works when pasted to an AI cold, so the command it
+  # names must be the one that actually installs everything.
+  if grep -q "speckit-init" "$QS"; then
+    ok "quickstart points at speckit-init (the command that installs /speckit too)"
+  else
+    bad "quickstart does not name speckit-init"
+  fi
+  if grep -q "/speckit.constitution" "$QS"; then
+    ok "quickstart tells the user to run /speckit.constitution first"
+  else
+    bad "quickstart omits /speckit.constitution"
+  fi
+  if grep -qE "Do not ask them anything technical|Do not ask the user anything technical" "$QS"; then
+    ok "quickstart is written for an agent, not a human"
+  else
+    bad "quickstart is not addressed to an AI assistant"
+  fi
+else
+  bad "QUICKSTART.md missing — no path for a non-expert or an AI to set this up"
+fi
+
 hdr "1c. changelog + version"
 if [ -f "$ROOT/CHANGELOG.md" ]; then
   ok "CHANGELOG.md present"
