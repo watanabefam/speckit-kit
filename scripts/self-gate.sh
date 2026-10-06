@@ -287,6 +287,23 @@ need("Hoare" in plan and "design-by-contract" in plan,
      "plan addendum cites the property lineage (Hoare / Liskov & Guttag / DbC)")
 need("it is a wish" in plan, "plan addendum states a property with no check is not a property")
 
+# --- Parking lot: capture discipline (scope control with a door) ---
+need("## Future Work (parking lot)" in spec, "spec addendum has the parking lot")
+need("Capture, do not act" in spec, "parking lot states the capture rule")
+need("Noticed during" in spec and "Why deferred" in spec and "Revisit when" in spec,
+     "parking lot records provenance (when/why/revisit)")
+need("Parking lot vs Non-Goals" in spec,
+     "parking lot distinguishes deferral from a Non-Goal decision")
+need("Review the parking lot at close-out" in spec, "parking lot has a review step")
+
+impl = open(os.path.join(base, "commands/speckit.implement.prepend.md"), encoding="utf-8").read()
+conv = open(os.path.join(base, "commands/speckit.converge.prepend.md"), encoding="utf-8").read()
+need("Park out-of-scope ideas" in impl, "implement command tells the agent to park, not act")
+need("do not drop them" in impl, "implement command forbids silently dropping an idea")
+need("Review the parking lot" in conv, "converge command reviews the parking lot")
+for outcome in ("promote", "keep parked", "delete"):
+    need(outcome in conv, f"converge names the parking outcome: {outcome}")
+
 # --- Property-test tasks (FR-007, FR-012) ---
 need("Property-Based Test Tasks" in tasks, "tasks addendum has the property-test rules")
 need("One task per P-ID" in tasks, "tasks addendum states one task per property")

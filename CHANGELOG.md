@@ -7,6 +7,50 @@ The preset version lives in `preset/preset.yml` and is what `specify preset info
 
 ## [Unreleased]
 
+## [1.5.0] — 2026-10-06
+
+### Added
+- **Parking lot.** `Future Work` is now a live capture queue with provenance (noticed-during /
+  why-deferred / revisit-when), a capture rule in `speckit.implement` (park it, do not act on it,
+  do not drop it), and a review step in `speckit.converge` (promote / keep parked / delete).
+  It also distinguishes a **Non-Goal** (decided upfront) from a **parked idea** (noticed in
+  passing, not yet decided). Adopted from `Education/course-studio`'s gate.
+
+  This closes a real gap: the kit said "do not implement unapproved work" and gave the idea
+  nowhere to go. Scope control without a capture path produces either silent scope creep or a
+  lost idea.
+
+- **Check-promotion bar** (documented in BUILD_PLAN): a check earns blocking only when its
+  measured false-positive rate is effectively zero **and** the existing corpus is already clean.
+  Fix the corpus first, then turn the check on. A check judged "not useful" >~10% of the time gets
+  deleted, not softened.
+
+### Rejected (built, then deleted before committing)
+- **A project-facing advisory linter** (`scripts/spec-lint.sh`). Researched first; the evidence
+  did not support it. Google: *"developers ignore compiler warnings"* — enable as errors or do not
+  show them. SonarQube field data: **8.76% of issues ever fixed**. Unactionable warnings 35–91%.
+  13% of Spectral pipelines run `continue-on-error` ("decorative governance"). Requirements-quality
+  automation precision ~59% — 4× worse than the <10% effective-FP bar. And **no spec-driven toolkit
+  ships a prose linter** — Spec Kit routes quality to agents (`/clarify`, `/analyze`, `/checklist`).
+
+  The decisive point: **"advisory by default" is the wrong posture, not the safe one.** It feels
+  low-risk to the builder and is highest-risk to the program — it spends trust in small daily
+  amounts. An advisory check the agent can shrug past is prompt-level enforcement with extra steps.
+
+- Also rejected from course-studio: phase-ordering enforcement, hash-chained state, minimum
+  progress steps, quality scoring, evidence-pattern regexes. All block by default; DORA's
+  multi-year finding is that heavyweight approval gates do not lower change-failure rate and
+  correlate with low performance (2.6× for CAB sign-off).
+
+### Verification status
+- **Verified:** the parking lot composes into the resolved spec template; the capture rule is
+  present in the `speckit.implement` command file the agent reads; the review rule is present in
+  `speckit.converge`; 13 new gate assertions pass.
+- **NOT verified — blocked:** the behavioural test (does an agent actually park an out-of-scope
+  idea instead of fixing it?) could not complete. The model returned a server error on three
+  consecutive attempts. The structural checks pass; the behavioural claim is untested. Do not
+  treat "parked correctly" as demonstrated.
+
 ## [1.4.0] — 2026-10-06
 
 Normative/informative discipline, document status, and checkable properties. Three of these came

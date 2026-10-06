@@ -11,6 +11,19 @@
 Execute the tasks as written. Do not add features, scope, or refactors that nobody approved —
 including ones that look obviously helpful. "Helpful" is not the same as "approved".
 
+### Park out-of-scope ideas — do not act on them, do not drop them
+
+When you notice something worth doing that is not in the approved tasks — a bug in an adjacent
+file, an obvious improvement, a refactor that would make this cleaner — **write it in the spec's
+`Future Work (parking lot)` table and continue the task you were on.**
+
+Do not implement it, even if it is one line. Do not silently drop it, even if it is minor. An
+unrecorded idea is indistinguishable from one that was never had, and the person reviewing your
+work cannot tell the difference.
+
+This is not a prohibition on noticing things. It is a requirement to record them where they can be
+found, instead of smuggling them into a change nobody approved.
+
 ### Evidence before "done"
 
 You may **not** mark a task or feature complete because the code compiles, a single test

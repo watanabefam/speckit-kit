@@ -167,10 +167,42 @@ real problem, the feature should not be built.]
 [The smallest slice that delivers the value of the highest-priority user story. Everything
 else is Future Work.]
 
-## Future Work
+## Future Work (parking lot)
 
-[Deliberately deferred. Not part of this feature's acceptance criteria. Must not be
-implemented without explicit approval.]
+Deliberately deferred. Not part of this feature's acceptance criteria. Must not be implemented
+without explicit approval.
+
+This section is also the **parking lot**: the place an out-of-scope idea goes the moment you notice
+it, so it is neither acted on nor lost. Scope control without somewhere to put the idea produces one
+of two failures — silent scope creep, or an idea that gets dropped and never seen again. Parking is
+the door in the wall.
+
+**Capture, do not act.** When you notice something worth doing that is not in the approved scope:
+write it here, and continue the task you were on. Do not implement it because it is small, obvious,
+or adjacent. Do not silently drop it either — an unrecorded idea is indistinguishable from one that
+was never had.
+
+| # | Idea | Noticed during | Why deferred | Revisit when |
+| --- | --- | --- | --- | --- |
+| 1 | | | | |
+
+- **Noticed during** — the phase or task where it surfaced. Useful context when it comes back.
+- **Why deferred** — one line. "Not this feature" is acceptable; unstated is not.
+- **Revisit when** — a trigger: after this ships, when the schema changes, if users ask. A parked
+  idea with no revisit condition is just a nicer way of losing it.
+
+### Parking lot vs Non-Goals
+
+They are different, and conflating them hides work:
+
+- **Non-Goals** are decided **upfront** — deliberately excluded from this feature, on purpose.
+- **The parking lot** is noticed **in passing** — not yet decided, just not now.
+
+A Non-Goal is a decision. A parked idea is a deferral awaiting one.
+
+**Review the parking lot at close-out** (`/speckit.converge`) and at each phase boundary. Promote
+an item to a spec, keep it parked with a reason, or delete it deliberately. What must not happen is
+reviewing it never.
 
 ## Validation Plan
 

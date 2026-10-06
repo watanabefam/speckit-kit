@@ -399,6 +399,56 @@ boundaries produced a false failure); it was rewritten line-wise.
 §1c asserts the changelog covers the current version; the E2E asserts uninit removes `.specify/`,
 preserves user content, and leaves git clean.
 
+## Gating-system review (2026-10-06)
+
+Reviewed the gate in `Education/course-studio` (a phase-ordering gate: hash-chained state,
+minimum progress steps per phase, evidence patterns, quality scoring, parking lot, token-gated
+cancel) to see what this kit should adopt. Researched before building, because the previous
+round's mistake was proposing from a single example.
+
+**Adopted — the parking lot.** The one idea that is both agile-compatible and evidence-neutral,
+because it is a *capture* mechanism, not a gate. The kit's scope control had a real gap: it said
+"do not implement unapproved work" and gave the idea nowhere to go. Scope control without a capture
+path produces either silent scope creep or a lost idea. `Future Work` is now a live parking lot with
+provenance (noticed-during / why-deferred / revisit-when), a capture rule in `speckit.implement`, and
+a review step in `speckit.converge`. Also distinguishes a **Non-Goal** (decided upfront) from a
+**parked idea** (noticed in passing, not yet decided) — conflating them hides work.
+
+**Adopted — the check-promotion bar.** A rule for how *this* kit adds gate checks:
+
+> A check earns blocking status only when (a) its measured false-positive rate is effectively zero,
+> **and** (b) the existing corpus is already clean. Fix the corpus first, then turn the check on —
+> the ratchet. A check whose findings are judged "not useful" more than ~10% of the time gets
+> deleted, not softened.
+
+**Rejected — a project-facing linter.** Built `scripts/spec-lint.sh` (advisory-by-default, checking
+status blocks, normative sections, EARS shapes, properties) and **deleted it before committing**.
+The evidence did not support it:
+
+| Evidence | Source |
+| --- | --- |
+| *"developers ignore compiler warnings"* — Google enables checks as errors or doesn't show them; <10% effective-FP bar for review surfacing, ~zero for blocking | CACM 2018 |
+| **8.76% of SonarQube issues ever fixed**; 50% of suppressions suppress zero warnings | ICPC 2019 / FSE 2025 |
+| Unactionable warnings 35–91% | NASCAR 2025 |
+| 13% of Spectral pipelines run `continue-on-error` ("decorative governance"); 63% run defaults; maturity 2–3/8 | Spectral census 2026 |
+| Requirements-quality automation precision **~59%** — 4× worse than the <10% FP bar | Femmer et al. |
+| **No spec-driven toolkit ships a prose linter** — Spec Kit routes quality to agents (`/clarify`, `/analyze`, `/checklist`) | github/spec-kit |
+
+The decisive point: **"advisory by default" is the wrong posture, not the safe one.** Advisory
+feels low-risk to the builder and is highest-risk to the program — it spends trust in small daily
+amounts and accumulates into a wall of ignored findings. If a check matters it must be blocking and
+near-zero-FP; if it cannot meet that bar it belongs to the agent/review layer, not a linter. And an
+advisory check the agent can shrug past is prompt-level enforcement with extra steps.
+
+**Rejected — everything else** from course-studio: phase-ordering enforcement, hash-chained state,
+minimum progress steps, quality scoring (GOLD/SILVER/BRONZE), and evidence-pattern regexes. All of
+these block by default, and DORA's multi-year finding is that heavyweight approval gates do not
+lower change-failure rate and correlate with low performance (2.6× for CAB sign-off).
+
+**The reframe worth keeping:** the agile-friendly design is **few blocking checks with near-zero
+false positives** — not many advisory ones. A large advisory set is what actually hurts agility
+(wall of red, learned ignoring), while a small blocking set that is always right gets respected.
+
 ## Known limitations
 
 - **Pre-marker AGENTS.md content** cannot be auto-replaced. The installer is non-destructive:
