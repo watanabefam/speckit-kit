@@ -126,19 +126,54 @@ behave — an invariant or contract that holds regardless of the specific data. 
 check the examples you thought of; a property is checked against many generated inputs, so it
 finds the cases you did not.
 
+The distinction from a functional requirement is *quantification*, not importance. `FR-001` says
+"when the user submits X, the system returns Y" — one example, pass or fail. A property says "for
+any input in domain D, P holds" — an oracle that judges many runs. The lineage is Hoare triples,
+Liskov & Guttag invariants, and Meyer's design-by-contract (`require` / `ensure` / `invariant`).
+
 Not every requirement maps cleanly to a property. Map what you can, and **opt out explicitly** for
 the rest — a vacuous property is worse than a recorded opt-out.
 
-| Property ID | Requirement | `for any …` statement | Non-mapped reason | Notes |
-| --- | --- | --- | --- | --- |
-| P-001 | FR-001 | `for any <domain>, <property that must hold>` | — | |
-| — | FR-002 | — | qualitative / no decidable oracle | |
+| Property ID | Requirement | Scope | `for any …` statement | Check method | Non-mapped reason |
+| --- | --- | --- | --- | --- | --- |
+| P-001 | FR-001 | operation / type / system | `for any <domain>, <property that must hold>` | property-test | — |
+| — | FR-002 | — | — | — | qualitative / no decidable oracle |
+
+**Scope** — what the property ranges over. `operation` (holds for one call — a Hoare triple),
+`type` (holds for every instance — a class invariant), or `system` (holds across components or over
+a sequence of states, e.g. "no two replicas disagree"). An unscoped invariant is unverifiable: you
+cannot check a claim without knowing what it claims about.
+
+**Check method** — how the property is actually enforced. One of:
+
+| Method | Use when |
+| --- | --- |
+| `runtime-assert` | cheap to check on every execution (pre/post-conditions, class invariants) |
+| `property-test` | a generator can produce the input domain (round-trip, idempotence, invariant-preservation) |
+| `model-check` | the risk is a concurrency or protocol bug worth exploring exhaustively (TLA+) |
+| `review-only` | no executable check is practical — **state why**, and accept it is weaker |
+
+A property with no check method is not a property; it is a wish. Non-executable prose is acceptable
+only under `review-only`, and only with the reason recorded.
 
 ### Rules
 
 - **Start every property with `for any`.** A statement naming specific values is an example, not
   a property. `for any request carrying an expired token, the response is 401` is a property;
   `request #5 returns 401` is a test case.
+- **Name the check method.** A property you cannot check is a wish — see the table above. `review-only`
+  is a legitimate answer, but it must be chosen, not fallen into.
+- **Most properties are one of five shapes.** Reach for these first; they are well understood and
+  each has a standard way to generate inputs:
+
+  | Shape | Statement | Example |
+  | --- | --- | --- |
+  | Round-trip | `decode(encode(x)) == x` | `for any event, parsing its serialised form yields the same event` |
+  | Idempotence | `f(f(x)) == f(x)` | `for any deck, validating it twice reports the same result` |
+  | Invariant-preservation | after any operation, I still holds | `for any review outcome, the log stays append-only` |
+  | Commutativity | `f(g(x)) == g(f(x))` | `for any two independent edits, order does not change the result` |
+  | Model-equivalence | impl(x) matches a simple reference | `for any schedule, the optimised scheduler agrees with the naive one` |
+
 - **One requirement may yield several properties** (1:many) — split by input domain, not by
   convenience. Two properties about one requirement are fine; one property pretending to cover
   two is not.

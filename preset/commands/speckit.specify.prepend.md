@@ -16,13 +16,27 @@ ones — do not treat them as optional scaffolding.
    `bash .specify/scripts/bash/resolve-template.sh spec-template > <SPEC_FILE>`
 2. Fill that file **in place**. Edit it — do not write the spec from scratch.
 3. **Do not drop, rename, reorder, or summarise any section the resolved file contains**,
-   including the sections that appear *after* the core ones (Carried Forward, Problem,
-   Goals, Non-Goals, Dependencies and External Contracts, MVP Scope, Future Work,
-   Validation Plan, Requirement Traceability).
+   including the sections that appear *after* the core ones (Document Status, Normative Status,
+   Requirements Syntax (EARS), Carried Forward, Problem, Goals, Non-Goals, Dependencies and
+   External Contracts, MVP Scope, Future Work, Validation Plan, Requirement Traceability).
 
 If a section genuinely does not apply, keep its heading and write
 `Not applicable — <reason>`. A generated spec missing preset sections is a defect, not a
 simplification.
+
+### Document Status goes directly after the core metadata
+
+The resolved template appends a `Document Status` section, but it belongs **immediately after the
+core metadata block** (`Feature Branch` / `Created` / `Status` / `Input`) — not where the section
+lands at the end. Move it there as you fill the spec.
+
+**Do not add a second status field.** The core `**Status**` field is the lifecycle state; this
+section defines its values and records the approval metadata. Two status fields will eventually
+disagree, and a reader will not know which to believe.
+
+Fill every field — status, status-changed date, approver, authority, workflow, companion. Do not
+leave them blank or write `TBD`. An unfilled status is worse than none: it implies the question was
+considered and left open.
 
 ## Step rules
 

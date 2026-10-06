@@ -7,6 +7,56 @@ The preset version lives in `preset/preset.yml` and is what `specify preset info
 
 ## [Unreleased]
 
+## [1.4.0] — 2026-10-06
+
+Normative/informative discipline, document status, and checkable properties. Three of these came
+from reading a hand-rolled spec in another repo (`Education/timeline-game`), then checking that
+repo's conventions against the standards rather than against my own opinion. Two of the three were
+already **standard** — I had proposed them as "good ideas", which undersold them.
+
+### Added
+- **`Normative Status` section** in `spec-addendum.md`. Defines normative vs informative content and
+  cites the source: ISO/IEC Directives Part 2 §3.2, the W3C QA Framework, and IETF reference
+  practice. Two checkable rules follow — requirements live only in normative sections (ISO/IEC is
+  explicit that notes and examples "shall not contain requirements"), and normative keywords do not
+  appear in informative sections.
+- **The precedence rule for companion documents.** There is *no automatic precedence* between two
+  documents; ISO, W3C, and IETF all require the relationship to be declared, with a **dated**
+  reference. The template now states which document is authoritative for behaviour and which is
+  informative. This generalises the `Companion:` line found in the timeline-game specs, which
+  declared the relationship but not the precedence.
+- **`Document Status` block** in `spec-addendum.md`: status, date, approver, authority, workflow,
+  companion. MADR-informed, and deliberately an **open set** — MADR does not standardise a closed
+  enum, so neither does this. Approval is recorded as **three separate facts** (who, when, under
+  what authority) rather than collapsed into the status word, because `accepted` does not say who
+  accepted it or why they were entitled to.
+- **Scope and check method per correctness property** in `plan-addendum.md`. A property now names
+  what it ranges over (`operation` / `type` / `system`) and how it is enforced (`runtime-assert` /
+  `property-test` / `model-check` / `review-only`). A property with no check method is a wish, not a
+  property.
+- **Canonical property shapes** — round-trip, idempotence, invariant-preservation, commutativity,
+  model-equivalence — with the property lineage (Hoare triples, Liskov & Guttag, design-by-contract).
+- Self-gate §3c extended: 20 new assertions covering normative/informative, the ISO notes rule, the
+  precedence rule, every status field, the open-set declaration, and every check method.
+
+### Changed
+- **`SHALL` is no longer prescribed for every sentence.** The EARS section previously said "use
+  `SHALL` for every required behaviour", which contradicted RFC 2119 §6 — the keywords "must be
+  used with care and sparingly", and "must not be used to try to impose a particular method on
+  implementors where the method is not required for interoperability". A spec where every sentence
+  is `SHALL` has abolished the distinction it was trying to draw.
+- `speckit.specify` prepend now enforces status-block **placement** (top of file, under the title).
+  The append strategy cannot put a header at the top, so the command has to move it — and it
+  forbids leaving the fields blank, because an unfilled status implies the question was considered
+  and left open.
+
+### Method note
+The three adoptions were first proposed by comparing two artifacts, which is not evidence. They were
+then checked against primary sources (ISO/IEC Directives Part 2, W3C QA Framework REC 2005, IETF
+IESG statements, RFC 2119/7322/2026, MADR, Claessen & Hughes, Liskov & Guttag, Meyer). Two were
+promoted from "good idea" to "standard"; one was corrected; one new lintable rule was found that
+had been missed entirely.
+
 ### Added
 - **`/speckit` — a deterministic entry point.** `commands/speckit.md`, copied into
   `.opencode/commands/` by the installer. Invoking it classifies the request, picks the smallest

@@ -237,6 +237,36 @@ for shape in ("THE <system> SHALL <response>", "WHEN <trigger>",
 need("RFC 2119" in spec, "spec addendum states the RFC 2119 keyword rule")
 need(re.search(r"never MUST", spec) is not None, "spec addendum bans MUST")
 need("Clause order is fixed" in spec, "spec addendum states the clause-order rule")
+need("used with\ncare and sparingly" in spec or "care and sparingly" in spec,
+     "spec addendum carries the RFC 2119 'sparingly' rule (do not SHALL everything)")
+
+# --- Normative vs informative (ISO/IEC Directives Pt 2 §3.2; W3C QA Framework) ---
+need("## Normative Status" in spec, "spec addendum has a Normative Status section")
+need("Normative** — binds conformance" in spec, "spec addendum defines normative")
+need("Informative** — assists understanding" in spec, "spec addendum defines informative")
+need("shall not contain requirements" in spec,
+     "spec addendum bans requirements in notes/examples (ISO/IEC rule)")
+need("Normative keywords do not appear in informative sections" in spec,
+     "spec addendum bans normative keywords in informative sections")
+need("ISO/IEC Directives" in spec, "spec addendum cites the normative/informative standard")
+need("no automatic precedence" in spec,
+     "spec addendum states there is no automatic precedence between documents")
+need("dated reference" in spec, "spec addendum requires a dated reference for the companion")
+
+# --- Document status metadata (MADR-informed) ---
+need("## Document Status" in spec, "spec addendum has a Document Status section")
+need("immediately after the core metadata block" in spec, "spec addendum fixes the status placement")
+for field in ("**Status changed:**", "**Approved by:**", "**Authority:**", "**Workflow:**",
+              "**Companion:**"):
+    need(field in spec, f"status block carries {field}")
+need("Do not add a second status field" in spec,
+     "spec addendum forbids a duplicate status field (the core template owns one)")
+need("open set" in spec, "status vocabulary is declared an open set, not a closed enum")
+need("never reuse an id" in spec, "status section states ids are never reused")
+need("three separate facts" in spec, "approval is recorded as who/when/authority, not one word")
+# The lifecycle must use the CORE template's vocabulary (Draft), not a competing one (proposed).
+need("`Draft`" in spec and "`Superseded by" in spec,
+     "lifecycle uses the core template's Draft vocabulary")
 
 # --- Correctness properties (FR-006, FR-009, FR-012) ---
 need("## Correctness Properties" in plan, "plan addendum has Correctness Properties")
@@ -246,6 +276,16 @@ need("Non-mapped reason" in plan, "plan addendum carries the opt-out column")
 need("Opt-out rule" in plan, "plan addendum states the opt-out rule")
 need("Framework decision" in plan, "plan addendum records the framework decision")
 need("Detect one; never assume one" in plan, "plan addendum says detect, never assume")
+need("Check method" in plan, "plan addendum requires a check method per property")
+for m in ("runtime-assert", "property-test", "model-check", "review-only"):
+    need(m in plan, f"plan addendum lists check method: {m}")
+need("Scope" in plan and "operation / type / system" in plan,
+     "plan addendum requires a property scope")
+need("Round-trip" in plan and "Invariant-preservation" in plan,
+     "plan addendum lists canonical property shapes")
+need("Hoare" in plan and "design-by-contract" in plan,
+     "plan addendum cites the property lineage (Hoare / Liskov & Guttag / DbC)")
+need("it is a wish" in plan, "plan addendum states a property with no check is not a property")
 
 # --- Property-test tasks (FR-007, FR-012) ---
 need("Property-Based Test Tasks" in tasks, "tasks addendum has the property-test rules")

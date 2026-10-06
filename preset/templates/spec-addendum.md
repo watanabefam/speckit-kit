@@ -6,6 +6,73 @@
   problem framing and traceability that the core template does not carry.
 -->
 
+## Document Status
+
+**Place this block immediately after the core metadata block** (the `Feature Branch` / `Created` /
+`Status` / `Input` lines), not at the end where this section lands.
+
+The core template already carries a `**Status**` field. **Do not add a second status field** — two
+status fields will eventually disagree, and a reader will not know which one to believe. This
+section *defines* the core field's lifecycle and records the approval metadata the core does not ask
+for.
+
+**Lifecycle for the core `Status` field** — an open set, in the manner of MADR (Markdown
+Architectural Decision Records), which deliberately does not standardise a closed enum:
+
+`Draft` → `Accepted` → `Deprecated` | `Superseded by <id>`
+
+`Draft` means not yet agreed; `Accepted` means in effect and safe to rely on; `Deprecated` means
+discouraged but not replaced; `Superseded by <id>` means replaced, and must name its replacement.
+**Never edit a superseded spec, and never reuse an id.**
+
+Record the remaining metadata here:
+
+```
+**Status changed:** YYYY-MM-DD (last status change)
+**Approved by:** <who> · **Authority:** <what authorised it>
+**Workflow:** <full spec-driven | short path> · **Companion:** <path, or "none">
+```
+
+Approval is **three separate facts** — who, when, and under what authority. Do not collapse them
+into the status word: `Accepted` does not say who accepted it, or why they were entitled to. This is
+the field a reader needs when asking "can I rely on this?", so it has to answer that.
+
+## Normative Status
+
+A specification has two kinds of content, and conflating them is how specs become untestable.
+
+- **Normative** — binds conformance. A requirement here is one an implementation can be judged
+  against, pass or fail.
+- **Informative** — assists understanding. Rationale, background, examples, and notes.
+
+This distinction is standard, not stylistic: ISO/IEC Directives Part 2 §3.2 defines it, the W3C QA
+Framework requires a spec to state how the two are distinguished, and IETF practice splits
+references into normative and informative. Two rules follow, and both are checkable:
+
+1. **Requirements live only in normative sections.** ISO/IEC is explicit that notes and examples
+   "shall not contain requirements" — they are always informative. Do not smuggle a requirement into
+   a note, an example, or a comment. A reader who skips the informative material must still be able
+   to build the right thing.
+2. **Normative keywords do not appear in informative sections.** If a rationale section says
+   "the system SHALL…", either it is a requirement that belongs above, or the wording is wrong.
+   Avoid language that *sounds* binding outside the normative sections.
+
+**State the boundary in the document.** Say which sections are normative. Silence leaves the reader
+to guess, and the guess is usually that everything binds.
+
+### Which document wins
+
+When a companion document exists — research notes, a design rationale, a brief — declare the
+authority relationship explicitly and **with a dated reference**:
+
+> This spec is authoritative for behaviour. `<companion path>` is informative: it carries research
+> and rationale, and where the two disagree, this spec prevails.
+
+There is no automatic precedence between two documents. ISO, W3C, and IETF all require the
+relationship to be stated (a dated reference fixes the version; an undated one floats and will
+eventually contradict you). A companion document that is not labelled informative will be read as
+competing with the spec, and nobody will know which one to follow.
+
 ## Requirements Syntax (EARS)
 
 Every functional requirement is written in **EARS** (Easy Approach to Requirements Syntax). EARS
@@ -15,6 +82,13 @@ acceptance check from the requirement text alone.
 **Use `SHALL` for every required behaviour — never MUST, SHOULD, or a bare lowercase verb.**
 `SHALL` is the only normative keyword here (RFC 2119 sense). Mixing in MUST, or writing "the
 system validates…", leaves it ambiguous whether the behaviour is binding.
+
+**But do not `SHALL` everything.** RFC 2119 §6 is explicit that these keywords "must be used with
+care and sparingly", and "must not be used to try to impose a particular method on implementors
+where the method is not required for interoperability." A requirement that merely describes how
+something happens to work is informative — write it as prose. Reserving `SHALL` for behaviour that
+actually binds is what keeps the word meaningful; a spec where every sentence is `SHALL` has
+abolished the distinction it was trying to make.
 
 | Pattern | Keyword | Shape | Use when |
 | --- | --- | --- | --- |
