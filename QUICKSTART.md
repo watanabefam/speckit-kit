@@ -10,6 +10,20 @@ which command to run next.
 
 Run these in order. Each step prints whether it was already present, so **re-running is safe**.
 
+**0. Get the kit's files if you do not already have them.**
+
+Skip this if you are reading this inside a checkout of the kit.
+
+```bash
+KIT="$(mktemp -d)/kit"
+curl -fsSL https://github.com/watanabefam/speckit-kit/archive/refs/heads/main.tar.gz \
+  | tar xz -C "$(dirname "$KIT")"
+KIT="$(dirname "$KIT")/speckit-kit-main"
+```
+
+No git required. If `curl` is unavailable, use `git clone https://github.com/watanabefam/speckit-kit`
+and point `KIT` at the clone.
+
 **1. Make sure the Spec Kit CLI is available.**
 
 ```bash
@@ -23,11 +37,10 @@ command -v uv >/dev/null 2>&1 && uv tool install "specify-cli==1.0.13" \
   || pipx install "specify-cli==1.0.13"
 ```
 
-**2. Install the kit's commands into the current project.**
+**2. Install the kit's commands into the project directory** (the one the user wants set up —
+usually your current working directory):
 
 ```bash
-# Replace with the real path to this repo if it is not already your working directory.
-KIT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 "$KIT/bin/speckit-init" .
 ```
 
@@ -65,16 +78,11 @@ is reached *through* `/speckit`. You rarely need to invoke them directly.
 That is a normal starting point. `/speckit` also answers "should I even build this?" — run it and
 describe the idea.
 
-## If you are setting this up from a URL rather than a clone
+## Do not reconstruct this from memory
 
-If you were given a link and not a directory, clone it first:
-
-```bash
-git clone https://github.com/watanabefam/speckit-kit.git
-```
-
-then point step 2 at that clone. Do not try to reconstruct the setup from memory — the files are
-authoritative.
+The files are authoritative. If step 0 or 2 fails, report the exact error and stop — do not
+hand-write `.specify/` files or recreate the installer yourself. A hand-built approximation will
+drift from the real thing and fail silently later.
 
 ## What you just set up, in one paragraph
 
