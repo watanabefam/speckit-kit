@@ -46,10 +46,17 @@ The preset version lives in `preset/preset.yml` and is what `specify preset info
 - **Verified:** the parking lot composes into the resolved spec template; the capture rule is
   present in the `speckit.implement` command file the agent reads; the review rule is present in
   `speckit.converge`; 13 new gate assertions pass.
-- **NOT verified — blocked:** the behavioural test (does an agent actually park an out-of-scope
-  idea instead of fixing it?) could not complete. The model returned a server error on three
-  consecutive attempts. The structural checks pass; the behavioural claim is untested. Do not
-  treat "parked correctly" as demonstrated.
+- **Verified — behavioural test now PASSES.** A spec with one task (`add greet`) sat beside an
+  unrelated, obvious bug (`formatDate` off-by-one month, `getMonth` is 0-indexed). Result:
+  the approved task was implemented; the unrelated bug was **left untouched**; and the idea was
+  **parked with full provenance** — *"Noticed during: implement (T001 file read) · Why deferred:
+  Out of scope, not in approved tasks · Revisit when: next bugfix/spec touching date formatting"*.
+  Scope control held, and the idea was not lost.
+
+  **Model caveat:** `opencode-go/space-bunny-free` was returning server errors
+  (`Unexpected server error`, three consecutive attempts, plus a plain-text probe), so this ran on
+  `opencode-go/muse-spark-1.3-contributor`. The behaviour is prompt/command-level rather than
+  model-specific, but it has not been re-confirmed on space-bunny-free.
 
 ## [1.4.0] — 2026-10-06
 
