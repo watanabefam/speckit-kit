@@ -41,6 +41,20 @@ else
   bad "eval runner hang regression — run: python3 evals/test-runner-hang.py"
 fi
 
+hdr "1b2. eval runners isolate the working directory"
+# opencode resolves the project from $PWD, NOT from the process working directory.
+# A runner that passes cwd= without setting PWD silently evaluates the LAUNCHING
+# repo instead of the fixture — which is exactly what happened, and it produced a
+# confident, wrong finding ("the skill false-triggers") that survived several
+# versions. This assertion exists so it cannot come back quietly.
+for r in evals/run-trigger-evals.py evals/run-outcome-evals.py; do
+  if grep -q "PWD=cwd" "$ROOT/$r"; then
+    ok "$(basename "$r") sets PWD (cwd alone is ignored by opencode)"
+  else
+    bad "$(basename "$r") passes cwd but not PWD — it will evaluate the wrong directory"
+  fi
+done
+
 hdr "1d. deterministic entry point"
 # The skill fires ~60% of the time. /speckit is the 100% path, so its presence and
 # content are load-bearing: if it goes missing, the only remaining entry point is

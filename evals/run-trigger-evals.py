@@ -77,8 +77,15 @@ def run(cmd, cwd, timeout, detect=DETECT):
     respects the deadline.
     """
     t0 = time.time()
+    # `cwd=` alone is NOT enough. opencode resolves the project from the PWD
+    # environment variable, not from the process's actual working directory, so a
+    # subprocess started with cwd=<target> still runs in whatever directory the
+    # PARENT was in. This silently ran every eval in the launching repo instead of
+    # the intended context repo — which meant the "plain" (no .specify/) context was
+    # never plain, because the launcher was a Spec Kit repo. Set PWD explicitly.
+    env = dict(os.environ, PWD=cwd)
     p = subprocess.Popen(
-        cmd, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        cmd, cwd=cwd, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
         bufsize=0, start_new_session=True,
     )
     fired = False
@@ -156,7 +163,11 @@ def main() -> int:
     ap.add_argument("--spec-kit-repo")
     ap.add_argument("--plain-repo")
     ap.add_argument("--runs", type=int, default=3, help="runs per query; 1 is NOT a measurement")
-    ap.add_argument("--threshold", type=float, default=0.5, help="trigger verdict at this fire-rate (0.5 = 2/3)")
+    ap.add_argument("--threshold", type=float, default=0.5, help="per-query trigger verdict at this fire-rate (0.5 = 2/3, the documented default)")
+    ap.add_argument("--gate", type=float, default=None,
+                    help="optional: exit non-zero if the should-trigger rate is below this. "
+                         "Off by default — a miss is a probability, not a defect, and gating on it "
+                         "invites tuning the description to the test set.")
     ap.add_argument("--model")
     ap.add_argument("--only", choices=["st", "snt"])
     ap.add_argument("--only-ids", help="comma-separated query ids, e.g. st-06,st-08. "
@@ -256,16 +267,51 @@ def main() -> int:
         for group, (p, t) in summary.items():
             label = "should trigger" if group == "should_trigger" else "should NOT trigger"
             print(f"  {label:20} {p}/{t}  ({p/t*100:.0f}%)")
+
+        st_p, st_t = summary.get("should_trigger", (0, 0))
+        snt_p, snt_t = summary.get("should_not_trigger", (0, 0))
+        st_rate = st_p / st_t if st_t else 1.0
+        false_triggers = snt_t - snt_p
+
+        # Exit semantics. These two sets are NOT the same kind of thing, and treating
+        # them alike is what makes a probabilistic metric into a bad gate:
+        #
+        #   should-NOT-trigger firing is a DEFECT. The skill loaded where its stated
+        #   precondition says it must not. That is a correctness failure and it fails
+        #   the run.
+        #
+        #   should-trigger missing is a PROBABILITY. The model decided it could handle
+        #   the task without the skill — often a legitimate call, and for a skill whose
+        #   job is "decide how much process this needs", misses are partly by design.
+        #   It is reported, not failed, because a hard gate on a probabilistic number
+        #   invites teaching the description to the test set.
+        #
+        # The 90% is Anthropic's aspirational example benchmark, not a requirement.
+        # Pass --gate <rate> to enforce a threshold anyway.
+        if a.gate is not None:
+            print(f"\n  should-trigger {st_rate:.0%} vs --gate {a.gate:.0%}")
+        else:
+            print(f"\n  should-trigger {st_rate:.0%} (aspirational benchmark ~90%; not a gate)")
+
         if n_timeouts:
             print(f"\n  WARNING: {n_timeouts} run(s) timed out at --timeout {a.timeout}s and were"
                   "\n           EXCLUDED from the scores above, not counted as misses."
                   "\n           Re-run with a higher --timeout before quoting a number.")
-        good = all(p == t for p, t in summary.values()) and n_timeouts == 0
-        if not good:
-            print("\n  FAIL - see failures above.")
-        else:
-            print("\n  PASS")
-        return 0 if good else 1
+
+        problems = []
+        if false_triggers:
+            problems.append(f"{false_triggers} false trigger(s) — the skill fired where it must not")
+        if n_timeouts:
+            problems.append(f"{n_timeouts} timeout(s) — sample contaminated, re-run")
+        if a.gate is not None and st_rate < a.gate:
+            problems.append(f"should-trigger {st_rate:.0%} below --gate {a.gate:.0%}")
+
+        if problems:
+            print("\n  FAIL - " + "; ".join(problems))
+            return 1
+        print("\n  PASS - no false triggers" +
+              ("" if n_timeouts else ", sample clean"))
+        return 0
     finally:
         for d in temp:
             shutil.rmtree(d, ignore_errors=True)

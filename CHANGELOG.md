@@ -7,6 +7,85 @@ The preset version lives in `preset/preset.yml` and is what `specify preset info
 
 ## [Unreleased]
 
+## [1.7.0] — 2026-10-08
+
+Instrument bug in both eval runners, an outcome-eval runner that finally runs the rubrics, and a
+**retraction** of two published findings.
+
+### Fixed — the runners evaluated the wrong directory (major)
+Both runners passed `cwd=` to `subprocess.Popen` but did **not** set `PWD`. opencode resolves the
+project from `$PWD`, not from the process working directory, so **every eval run executed in the
+directory the runner was launched from** — not the intended context repo. The launcher was a Spec
+Kit repo, so the "plain" (no `.specify/`) context was never plain.
+
+Found by investigating an outcome-eval failure instead of guessing: the agent reported *"README.md
+here is 298 lines about speckit-kit itself"* and cited this repo's own eval fixtures. Verified with a
+direct probe — `Popen(cwd=scratch)` launched from the kit dir ran in the kit dir; adding
+`env={PWD: scratch}` fixed it.
+
+**Consequence — a retraction.** The `snt-01` "false trigger" (`write a spec for the login flow`
+firing in a repo with no `.specify/`) was an **artifact**. Re-measured with the fix:
+
+| | before (buggy) | after (fixed) |
+| --- | --- | --- |
+| `snt-01` | 3/3 fired | **0/3** |
+| should-NOT-trigger | 9/10 | **10/10** |
+
+This retracts two findings from v1.4.0, both measured on contaminated runs:
+- ~~"Negative constraints in a skill description backfire"~~ — no evidence that negative vocabulary
+  affects triggering. The apparent 2/3 → 3/3 worsening was the bug.
+- ~~"The `.specify/` precondition cannot be enforced from the description"~~ — the precondition
+  **is** respected; a repo with no `.specify/` does not fire the skill.
+
+The v1.4.0 "Findings" section is kept with a RETRACTED banner rather than deleted, because how it
+went wrong is the instructive part: a confident mechanism ("naming the negative case raises semantic
+similarity") was built on a broken measurement, and it was more convincing than the boring
+explanation (the test ran in the wrong directory).
+
+**Unaffected:** the should-trigger results (that set is 100% spec-kit context, and the launcher was a
+Spec Kit repo, so it was accidentally correct). Re-measured anyway: **7/10 (70%)**.
+
+### Added — `evals/run-outcome-evals.py`
+The outcome rubrics in `skill-evals.json` existed but **nothing ran them** — only the gate checked
+their structure. There is now a runner that builds each fixture, runs the scenario, judges the
+transcript against `expected_behavior` / `failure_signals`, and reports.
+
+Three design points, each from the research:
+- **It runs the query through `/speckit`, not bare.** A bare query re-measures *triggering*: on a
+  small fix the skill often does not load (by design — trivial queries are not valid should-trigger
+  cases), so a rubric asking for skill-dependent behaviour like "states the chosen workflow" is
+  unanswerable. Forcing the workflow in makes this eval measure *guidance*. `--bare` reproduces the
+  trigger view.
+- **It reports whether the skill loaded**, so a failure says which layer to look at: "did not load"
+  points at the description, "loaded" at the skill text.
+- **Deterministic guards** for the unambiguous signals (`must_survive` / `must_not_exist`), so the
+  highest-value checks do not depend on a judge.
+
+Fixture setups were made mechanical (`fixture` field) rather than prose, so they are reproducible.
+
+### Changed — eval exit semantics
+The runner no longer hard-fails below 90%. The two sets are not the same kind of thing:
+
+- **should-NOT-trigger firing → FAIL.** The skill loaded where its precondition forbids. A defect.
+- **should-trigger missing → reported, not failed.** A probability, not a defect; hard-gating a
+  probabilistic number invites teaching the description to the test set. `--gate <rate>` opts in.
+- **Timeouts → FAIL.** A contaminated sample cannot produce a number.
+
+### Corrected — the 90% benchmark was misattributed
+The README called 90% *"Anthropic's target"* and *"stated for general skill corpora"*. The number is
+real but is an **aspirational example** from *The Complete Guide to Building Skills for Claude* (p.9),
+which says so itself: *"aspirational targets — rough benchmarks rather than precise thresholds."*
+No normative source (spec, platform docs, engineering post, `skill-creator`) states a 90%
+requirement. "General skill corpora" was invented; removed.
+
+Also corrected: an earlier changelog claimed the **0.5 threshold was "this kit's own invention"**.
+It is the documented upstream default (agentskills.io → optimizing descriptions, and
+`skill-creator`'s `run_eval(runs_per_query=3, trigger_threshold=0.5)`). Under-credited, now fixed.
+
+### Current state (valid instrumentation, `opencode/space-bunny-free`)
+- should-trigger **7/10 (70%)** · should-NOT-trigger **10/10 (100%)** · runner exits **PASS**
+- The skill respects its precondition. The remaining gap is the miss rate.
+
 ## [1.6.0] — 2026-10-08
 
 Agent-skills conformance pass. Researched official guidance (agentskills.io spec; Anthropic skill
@@ -221,8 +300,10 @@ had been missed entirely.
 - The skill description no longer enumerates the *negative* case. See below.
 
 ### Changed
-- Skill description rewritten to be short, positive, and free of negative-case vocabulary
-  (506 → 646 chars). See "Findings" below — the previous attempt made things measurably worse.
+- Skill description rewritten to be short and positive (506 → 646 chars). The original reason given
+  here — that negative-case vocabulary made a false trigger worse — has since been **retracted**:
+  that measurement was corrupted by a runner bug (`$PWD`). The shorter description was kept because
+  it is shorter, not because the longer one was proven harmful. See v1.7.0.
 - The `AGENTS.md` bridge now names `/speckit` as the preferred entry point and says why.
 
 ### Known constraint
@@ -230,44 +311,56 @@ had been missed entirely.
   does not exist in core is silently ignored. Presets can only `prepend` to existing commands.
   This is why `/speckit` is copied by `speckit-init` rather than declared in `preset.yml`.
 
-## Findings: skill descriptions are positive-only, short, and probabilistic
+## Findings: skill descriptions are probabilistic — and a retraction
+
+> **RETRACTED 2026-10-08 (v1.7.0).** The false-trigger result in this section was an
+> **instrument artifact**, not a finding. The eval runner passed `cwd=` to the subprocess but did
+> not set `PWD`, and opencode resolves the project from `$PWD` — so every run executed in the
+> *launching* directory, which was a Spec Kit repo. The "plain" context (no `.specify/`) was never
+> plain. With the fix, `snt-01` scores **0/3** and should-not-trigger is **10/10**. See v1.7.0.
+>
+> This invalidates findings 1 and 2 below (the "negative vocabulary backfires" result and the
+> "precondition cannot be enforced" claim). Both were measured on contaminated runs. Findings 3
+> and 4 — variance, and the ~60% rate — concern the should-trigger set, which ran in a
+> `.specify/` repo either way, so they are probably unaffected; they were re-measured in v1.7.0.
+>
+> Kept rather than deleted, because the way this went wrong is the most instructive thing here:
+> a confident mechanism ("naming the negative case raises semantic similarity") was built on a
+> broken measurement, and it sounded more convincing than the boring explanation (the test ran in
+> the wrong directory).
 
 Cross-model measurement on `opencode-go/space-bunny-free` (n=3/query, 300s cap, timed-out runs
 excluded). Three description variants were measured:
 
 | Variant | `st-06` multi-call-site refactor | `st-08` perf regression | `snt-01` false trigger |
 | --- | --- | --- | --- |
-| original (506 chars, 150s cap) | 2/3 ✅ | 1/3 ❌ | 2/3 ❌ |
-| + explicit prohibition (860 chars) | 1/3 ❌ | 1/3 ❌ | **3/3 ❌ worse** |
-| short + positive (646 chars, 300s cap) | 1/3 ❌ | 2/2 ✅ | 3/3 ❌ |
+| original (506 chars, 150s cap) | 2/3 ✅ | 1/3 ❌ | 2/3 ❌ *(invalid)* |
+| + explicit prohibition (860 chars) | 1/3 ❌ | 1/3 ❌ | **3/3 ❌ worse** *(invalid)* |
+| short + positive (646 chars, 300s cap) | 1/3 ❌ | 2/2 ✅ | 3/3 ❌ *(invalid)* |
 
-**1. Negative constraints in a skill description backfire.** To suppress a false trigger
-(`write a spec for the login flow` firing in a repo with no `.specify/`), the description was
-rewritten to lead with the precondition and an explicit prohibition — naming "write a spec", "spec
-out" and "requirements". The false trigger got **worse**: 2/3 → 3/3. Naming the negative case put
-those words into the description and raised its semantic similarity to the very query it was meant to
-exclude. Skill matching is semantic; a prohibition is not a filter.
+**1. ~~Negative constraints in a skill description backfire.~~ RETRACTED.** The apparent worsening
+(2/3 → 3/3) was the `$PWD` bug: `snt-01` ran in a `.specify/` repo in every variant, so it fired
+regardless of wording. There is **no evidence** that negative vocabulary affects triggering. The
+mechanism was plausible and wrong.
 
-**2. The `.specify/` precondition cannot be enforced from the description at all.** `snt-01`
-false-triggered in all three variants (2/3, 3/3, 3/3). The precondition is stated once, positively,
-and the skill still fires on a repo that has no `.specify/`. Whatever the description says, the
-*enforcement* has to live where it is read on invocation.
+**2. ~~The `.specify/` precondition cannot be enforced from the description.~~ RETRACTED.** With the
+runner fixed, the precondition **is** respected: a query with no `.specify/` present does not fire
+the skill (10/10 on the should-not-trigger set). The description's precondition works.
 
 **3. No variant produced a reliable improvement.** Run-to-run variance is large — `st-01` scored
 3/3 in one session and 1/3 in another with the same-ish setup. At n=3 these variants are **not
 distinguishable**, and no honest claim of improvement can be made from them.
 
-**4. The real headline.** Overall trigger rate on this model is ~60% (6/10 judged), the same ballpark
-as the original 60% on `muse-spark-1.3`. The apparent "80%" seen mid-session was not a better
-description — it was a small-sample artifact compounded by counting timeouts as misses. Two models,
-two measurements, **the same ~60%.**
+**4. The headline.** Trigger rate on the should-trigger set is ~60–70%. The apparent "80%" seen
+mid-session was not a better description — it was a small-sample artifact compounded by counting
+timeouts as misses.
 
-**Conclusion — this is the strongest argument yet for the P1 architecture.** Rules that must hold
-every time belong in commands, which are read on every invocation. A skill description is a
-probability surface: it can nudge the hit rate, but it cannot be relied on to enforce anything in
-*either* direction. Both failure modes observed here are description-level — a miss it could not
-prevent, and a false positive a prohibition could not suppress. The commands carry the rules; the
-skill carries the reasoning. That split is doing exactly the job it was designed for.
+**Conclusion — the architecture argument survives, on weaker evidence.** Rules that must hold every
+time belong in commands, which are read on every invocation. A skill description is a probability
+surface: it can nudge the hit rate, but it cannot be relied on to *guarantee* anything. Note that
+the false-positive half of the original argument is now gone — the skill does respect its stated
+precondition. What remains is the miss rate: ~60–70% is the honest case for putting rules in
+commands, and it is a weaker case than the version this section originally made.
 
 ## [1.3.0] — 2026-10-04
 

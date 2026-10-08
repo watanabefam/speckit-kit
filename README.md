@@ -285,8 +285,9 @@ Two things can go wrong with a skill, so there are two kinds of test:
 - **Behaviour** (`evals/skill-evals.json`) — does it give good guidance once loaded?
 - **Triggering** (`evals/trigger-evals.json`) — does it load at all? A skill that doesn't
   load fails *silently*: no error, the agent just handles the task itself. This is the
-  documented most-common failure mode, so trigger rate is the primary metric (**≥90%** on
-  relevant queries, **0** false triggers).
+  documented most-common failure mode, so trigger rate is the primary metric. The **≥90%** is
+  Anthropic's *aspirational example benchmark*, not a requirement (see `evals/README.md`);
+  **false triggers are the hard failure** — those are defects.
 
 `scripts/self-gate.sh` validates the preset manifest, the skill frontmatter, both eval files,
 and runs `speckit-init` end-to-end on a scratch repo — checking all four templates compose and

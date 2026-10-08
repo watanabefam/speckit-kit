@@ -15,22 +15,63 @@ problem, and the trigger description is usually the cause."*
 
 So trigger rate is the primary metric:
 
-- **should-trigger ≥ 90%** (Anthropic's target, over 10–20 queries)
+- **should-trigger ≥ 90%** — an **aspirational benchmark**, not a conformance target (see below)
 - **should-not-trigger = 0 false triggers**
+
+#### What the 90% actually is
+
+It is real, but it is not a spec requirement, and this README previously overstated it. The number
+comes from Anthropic's *The Complete Guide to Building Skills for Claude* (p.9), which introduces it
+as one example among several and says so explicitly:
+
+> *"These are aspirational targets — rough benchmarks rather than precise thresholds. Aim for rigor
+> but accept that there will be an element of vibes-based assessment."*
+> — [The Complete Guide to Building Skills for Claude](https://resources.anthropic.com/hubfs/The-Complete-Guide-to-Building-Skill-for-Claude.pdf), p.9
+
+The same page gives the method: *"Run 10-20 test queries that should trigger your skill."*
+
+**No normative source states a ≥90% requirement.** The [agentskills.io
+specification](https://agentskills.io/specification), the [skill authoring best
+practices](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices), the
+[engineering post](https://www.anthropic.com/engineering/equipping-agents-for-the-real-world-with-agent-skills)
+and `anthropics/skills`' own `skill-creator` contain no aggregate trigger target (`skill-creator`
+mentions `90%` zero times). An earlier version of this README called it "Anthropic's target… for
+general skill corpora" — that phrasing was invented and has been removed.
+
+Treat 90% as a direction of travel, and judge a change by whether it regresses, not by whether it
+crosses an arbitrary line.
 
 ### The method (a single run is not a measurement)
 
-This mirrors skill-creator's `run_loop.py`, which calls
-`run_eval(runs_per_query=3, trigger_threshold=0.5)`:
+This mirrors the standard method in
+[agentskills.io → optimizing descriptions](https://agentskills.io/skill-creation/optimizing-descriptions)
+and skill-creator's `run_loop.py`, which calls `run_eval(runs_per_query=3, trigger_threshold=0.5)`:
 
 - Each query runs **3 times**.
 - A query "triggers" when it fires in **≥ 50%** (i.e. 2 of 3) of its runs.
 - A query **passes** when that verdict matches its label.
 
-**This default is `--runs 3` and it is not optional.** With one run per query, the rate
-swings between runs and individual queries flip in both directions — which is exactly what
-happened on the first two measurements of this skill (60%, then 45%). Neither number was
-valid. Do not draw conclusions from `--runs 1`; the runner warns if you try.
+**Both defaults are the documented standard, not local choices.** `runs_per_query=3` and
+`trigger_threshold=0.5` are the values named in the optimizing-descriptions guide ("Run each query
+multiple times (3 is a reasonable starting point)… 0.5 is a reasonable default"). An earlier
+changelog entry in this repo claimed the 0.5 threshold was "this kit's own invention" — that was
+wrong; it is the upstream default.
+
+**`--runs 3` is not optional.** With one run per query, the rate swings between runs and individual
+queries flip in both directions — which is exactly what happened on the first two measurements of
+this skill (60%, then 45%). Neither number was valid. Do not draw conclusions from `--runs 1`; the
+runner warns if you try.
+
+### Split the set before tuning (train / validation)
+
+The standard method splits the eval set — roughly **60% train, 40% held-out validation** — and
+iterates on the train split only, up to about five times, picking the best by **validation** pass
+rate. This exists to stop you tuning the description against the very queries you then score it on.
+
+This kit's set is small (10 + 10), so a formal split is coarse, but the rule still applies: **if you
+change the description to fix a specific query, re-measure on queries you did not tune against.** A
+description tuned until the whole set passes has been taught to the test, and the score is fiction.
+That is the main reason the trigger eval is a *measurement*, not a build gate.
 
 ### should-trigger queries must be substantive
 
@@ -72,7 +113,16 @@ execution** during the build, which is why it's the primary runner.
 ./evals/run-trigger-evals.py --spec-kit-repo ~/Documents/GitHub/speckit-sandbox
 ```
 
-Exits non-zero if the should-trigger rate is below 90% or any false trigger occurs.
+**Exit semantics — the two sets are not the same kind of thing:**
+
+- **should-NOT-trigger firing → FAIL.** The skill loaded where its precondition says it must not.
+  That is a defect, and it fails the run.
+- **should-trigger missing → reported, not failed.** The model decided it could handle the task
+  without the skill. That is a probability, not a defect — and for a skill about "how much process
+  this needs", misses are partly by design. Hard-gating a probabilistic number invites tuning the
+  description to the test set.
+- **Timeouts → FAIL.** A contaminated sample cannot produce a number.
+- **`--gate <rate>`** enforces a should-trigger threshold if you want one. Off by default.
 
 ### Secondary — `promptfooconfig.yaml`
 
@@ -115,8 +165,17 @@ editing the skill or its description.
 | st-06 "Refactor the payment module…" | 0/3 | **miss** |
 | st-08 "The build got a lot slower…" | 1/3 | **miss** |
 
-**should-trigger: 6/10 = 60%** (target ≥90%). should-not-trigger was not re-measured at n=3;
-it scored 0 false triggers at n=1.
+**should-trigger: 6/10 = 60%** — below the aspirational ~90% benchmark. (An earlier note here said
+"0 false triggers at n=1"; that was superseded and the should-not-trigger set is now re-measured
+properly — see the `$PWD` note below.)
+
+> **Instrument bug, found and fixed 2026-10-08.** The runner passed `cwd=` to the subprocess but did
+> not set `PWD`. opencode resolves the project from `$PWD`, so **every run executed in the launching
+> directory**, not the intended context repo. Because the launcher was a Spec Kit repo, the "plain"
+> (no `.specify/`) context was never plain. Consequence: the `snt-01` "false trigger" reported in
+> earlier versions of this file was an **artifact**. With `PWD` set, `snt-01` scores **0/3** and
+> should-not-trigger is **10/10**. Any number in this file dated before 2026-10-08 that involves the
+> `plain` context should be treated as invalid.
 
 **This is a real, measured under-trigger, not sampling noise.** It matters that the earlier
 invalid single-run measurements also landed on 60% — two independent methods converging on
@@ -187,18 +246,19 @@ Description B was therefore reverted: it measured no better, and A is the plaine
 The experiment is recorded rather than deleted, because "we tried this and it didn't move"
 is the finding.
 
-### What this means for the 90% target
+### What this means for the 90% benchmark
 
-Anthropic's ≥90% target is stated for general skill corpora. For a skill whose whole job is
-*deciding how much process work warrants*, a meaningful share of relevant requests will be
-ones the model believes it can just do — those will not route, by design. The honest
-position is that this skill's realistic ceiling on task-shaped requests is **~60%**, and the
-routing is reliable (**2–3 of 3**) on requests carrying process language.
+The 90% is an aspirational example benchmark, not a requirement (see "What the 90% actually is"
+above — no normative source states it). For a skill whose whole job is *deciding how much process
+work warrants*, a meaningful share of relevant requests will be ones the model believes it can just
+do — those will not route, by design. The honest position is that this skill's realistic ceiling on
+task-shaped requests is **~60–70%**, and the routing is reliable (**2–3 of 3**) on requests carrying
+process language.
 
 If a higher rate matters more than precision, the lever is **not** the description — it is
 scoping the skill's stated trigger to process-shaped requests only (narrow, honest, and
 measures high), or pushing the workflow into the commands so it doesn't depend on a skill
-loading at all.
+loading at all. That second option is what `/speckit` does.
 
 
 
