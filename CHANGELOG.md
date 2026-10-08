@@ -53,10 +53,31 @@ The preset version lives in `preset/preset.yml` and is what `specify preset info
   Out of scope, not in approved tasks · Revisit when: next bugfix/spec touching date formatting"*.
   Scope control held, and the idea was not lost.
 
-  **Model caveat:** `opencode-go/space-bunny-free` was returning server errors
-  (`Unexpected server error`, three consecutive attempts, plus a plain-text probe), so this ran on
-  `opencode-go/muse-spark-1.3-contributor`. The behaviour is prompt/command-level rather than
-  model-specific, but it has not been re-confirmed on space-bunny-free.
+**Re-confirmed on `opencode/space-bunny-free`.** The earlier failures were *my* bad parameter, not
+a provider outage: `opencode-go/space-bunny-free` has been retired from that provider, so every run
+against it returned `Unexpected server error`. The live slug is `opencode/space-bunny-free`
+(`opencode-go/space-bunny` and `nous/stealth/space-bunny-alpha` also exist). Lesson worth keeping:
+a provider error on a model you believe is live is a reason to re-check the model list, not to
+assume the provider is down.
+
+Result on space-bunny-free — PASS, and stronger than the muse-spark run:
+
+- approved task implemented; `formatDate` left untouched
+- the parked row **cites `plan.md`'s "Must Not Change" boundary** as its reason, rather than
+  asserting out-of-scope-ness
+- it **verified the parked claim before parking it** — ran
+  `formatDate(new Date(2026,9,8))` → `2026-9-8` to confirm the bug was still present
+- it parked a second item unprompted: a stray scratch file at the repo root, explicitly noting
+  *"deleting a tracked file was not authorised"*
+- T001 was ticked only because the task carried a `Verification:` line it could actually execute
+
+Two intermediate findings from getting there:
+
+- A **malformed fixture** (spec + tasks, no `plan.md`) did not produce a parking-lot failure. The
+  model refused to implement, spotted the missing artifact, applied repair-at-the-source, and
+  declined to tick T001 with no `Verification` line and no test framework — *"which the
+  `Evidence before done` rule forbids"*. Doctrine firing correctly on a broken input is a good sign,
+  but it made the parking-lot question unanswerable, so the fixture was corrected and re-run.
 
 ## [1.4.0] — 2026-10-06
 
