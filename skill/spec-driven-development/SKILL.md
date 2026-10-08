@@ -1,6 +1,6 @@
 ---
 name: spec-driven-development
-description: Use this skill for software work in a repository that contains a .specify/ directory (the Spec Kit marker). Applies to new features, bug fixes, refactors, migrations, maintenance, dependency and documentation updates; to diagnosing an unknown cause before fixing, such as a performance regression, slow build, or flaky or intermittent failure; to refactors spanning several call sites or changing a public contract; and to deciding how much process a request warrants. Covers workflow selection proportional to risk, approval gates, requirement traceability, handoff discipline, contradiction repair, scope control, and evidence-based completion.
+description: "Spec-driven development for software work in a repository containing a .specify/ directory (the Spec Kit marker): new features, bug fixes, refactors, migrations, maintenance, dependency and documentation updates; diagnosing an unknown cause before fixing, such as a performance regression, slow build, or flaky or intermittent failure; refactors spanning several call sites or changing a public contract; and deciding how much process a request warrants. Covers workflow selection proportional to risk, approval gates, requirement traceability, handoff discipline, contradiction repair, scope control, and evidence-based completion."
 license: MIT
 metadata:
   category: development
@@ -15,8 +15,21 @@ code is made to match them.
 
 ## Where the rules live
 
-**The enforceable rules are prepended to the Spec Kit commands themselves**, so they apply
-whenever a step runs — whether or not this skill loaded.
+**The step rules are prepended to the Spec Kit commands themselves**, so they are always present
+when a step runs — whether or not this skill loaded.
+
+A command guarantees the rule is **read**, not that it is **obeyed**. Commands are prompt text like
+any other; the model can still deviate. This is a deliberate limit, not a defect to paper over:
+
+| You want | Use |
+| --- | --- |
+| a rule to be *present* whenever a step runs | a command (this kit) |
+| a rule to be *followed* reliably | a command, and check the artifact afterwards |
+| a rule that *cannot* be violated | a hook or a permission — not a command, and not this skill |
+
+Do not describe a command as "enforcing" anything. Nothing in this kit can enforce. What the kit
+buys is that the rule is in front of the model at the moment it acts, instead of depending on a
+skill that fires about 60% of the time.
 
 | Step | The command carries |
 | --- | --- |
@@ -70,6 +83,10 @@ These apply at every step; the project's working-agreements states them in full.
 
 ## References
 
-- `references/anti-patterns.md` — the failure modes, and the working procedure
-- `references/convergence.md` — the convergence report
-- `references/existing-project.md` — inspection before adopting this in an established repository
+Read one when its trigger applies; they are one level deep and load on demand.
+
+| Read this | When |
+| --- | --- |
+| `references/existing-project.md` | before adopting this workflow in a repository that already has code |
+| `references/anti-patterns.md` | when deciding how much process a request warrants, or when a step feels like ceremony |
+| `references/convergence.md` | at close-out, comparing what was built against what the artifacts said |

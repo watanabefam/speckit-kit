@@ -87,8 +87,10 @@ cd "$ROOT"
 # Why it exists: the `spec-driven-development` skill loads on roughly 60% of relevant
 # requests. Skill matching is semantic, so the skill is a probability surface — fine
 # for reasoning, wrong for anything that must always apply. An invoked command is
-# deterministic: the user typed it, so it ran. This gives the workflow a 100% entry
-# point without making the skill do enforcement work.
+# deterministic to *invoke*: the user typed it, so it ran. (It is not deterministic to
+# *obey* — commands are prompt text like any other, and the model can still deviate.
+# A rule that must not be violable needs a hook or a permission, not a command.)
+# This gives the workflow a reliable entry point without making the skill carry rules.
 ENTRY="$ROOT/.opencode/commands/speckit.md"
 ENTRY_SRC="$KIT_ROOT/commands/speckit.md"
 if [[ -f "$ENTRY_SRC" ]]; then
@@ -198,7 +200,7 @@ artifacts under `specs/` are the source of truth.
 **Load the `spec-driven-development` skill before specifying, planning, or implementing.**
 It carries the workflow, approval gates, traceability and verification rules.
 
-**Prefer `/speckit`.** It is the deterministic entry point: it classifies the request, picks the
+**Prefer `/speckit`.** It is the reliable entry point: it classifies the request, picks the
 smallest workflow that fits, and routes to the right step. The skill above loads on roughly 60% of
 relevant requests — invoke `/speckit` when you need the workflow to apply for certain.
 

@@ -57,8 +57,8 @@ from requirement to test explicit.
 ## Why the rules live in the commands, not only in the skill
 
 The skill fires on roughly **60%** of relevant requests (measured — see `evals/`). A rule that
-must *always* apply cannot live behind a probabilistic trigger. So each step's enforceable
-rules are prepended to the command that runs that step:
+must *always* apply cannot live behind a probabilistic trigger. So each step's rules are prepended
+to the command that runs that step:
 
 | Command | Carries |
 | --- | --- |

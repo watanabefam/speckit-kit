@@ -136,6 +136,65 @@ if not (1 <= len(desc) <= 1024):
 lines = raw.count("\n")
 if lines >= 500:
     print(f"  FAIL  SKILL.md is {lines} lines — Anthropic recommends under 500"); ok = False
+
+# --- frontmatter portability ---------------------------------------------------
+# The portable spec fields are name, description, license, compatibility, metadata,
+# allowed-tools. opencode recognises five of those and SILENTLY IGNORES the rest —
+# so a stray top-level field looks like it works and does nothing. Claude Code
+# packaging hard-errors on unknown keys. Either way, only spec fields belong here.
+ALLOWED = {"name", "description", "license", "compatibility", "metadata", "allowed-tools"}
+top = [ln.split(":", 1)[0].strip() for ln in fm.splitlines()
+       if ln.strip() and not ln[0].isspace() and ":" in ln]
+extra = [k for k in top if k not in ALLOWED]
+if extra:
+    print(f"  FAIL  non-spec frontmatter field(s): {', '.join(extra)} "
+          f"(opencode ignores them silently; Claude Code packaging rejects them)"); ok = False
+else:
+    print(f"  ok    frontmatter uses only spec fields ({', '.join(sorted(top))})")
+
+# metadata values must be strings per the spec (a bare 1.0 parses as a float)
+if "metadata:" in fm:
+    bad_md = [ln.strip() for ln in fm.splitlines()
+              if ln.startswith((" ", "\t")) and ":" in ln
+              and not re.match(r'^\s*[A-Za-z0-9_-]+:\s*(".*"|\'.*\'|\S+)$', ln)]
+    if bad_md:
+        print(f"  FAIL  metadata value(s) not plain strings: {bad_md}"); ok = False
+
+# --- description style (official guidance: third person, what + when) ----------
+# "Always write in third person. The description is injected into the system prompt."
+if re.match(r'^(Use this|You |I |Helps with|This skill)', desc):
+    print("  FAIL  description opens in the imperative/second person; "
+          "official guidance requires third person (e.g. 'Spec-driven development for …')")
+    ok = False
+else:
+    print("  ok    description is third person")
+
+# --- the kit must not claim it can enforce anything ----------------------------
+# Commands guarantee INVOCATION, not COMPLIANCE. Claiming otherwise is the exact
+# error official guidance corrects: "context, not enforced configuration".
+for rel in ("skill/spec-driven-development/SKILL.md", "README.md", "commands/speckit.md"):
+    fp = os.path.join(os.path.dirname(base), rel)
+    if not os.path.isfile(fp):
+        continue
+    body = open(fp, encoding="utf-8").read()
+    if re.search(r'\benforceable rules\b', body, re.I):
+        print(f"  FAIL  {rel} still claims 'enforceable rules' — commands cannot enforce"); ok = False
+if ok:
+    print("  ok    no 'enforceable rules' claim (commands guarantee invocation, not compliance)")
+
+# --- references must state when to read them ----------------------------------
+refs_dir = os.path.join(base, "references")
+if os.path.isdir(refs_dir):
+    ref_files = sorted(f for f in os.listdir(refs_dir) if f.endswith(".md"))
+    named = sum(1 for f in ref_files if f in raw)
+    if named != len(ref_files):
+        print(f"  FAIL  {len(ref_files)-named} reference file(s) not linked from SKILL.md"); ok = False
+    elif "| Read this | When |" not in raw:
+        print("  FAIL  references are linked but no 'Read this / When' table — "
+              "official guidance: make the read trigger explicit"); ok = False
+    else:
+        print(f"  ok    all {len(ref_files)} references linked with an explicit read trigger")
+
 if ok:
     print(f"  ok    skill frontmatter valid (name={name}, {lines} lines, desc {len(desc)} chars)")
 sys.exit(0 if ok else 1)

@@ -7,6 +7,71 @@ The preset version lives in `preset/preset.yml` and is what `specify preset info
 
 ## [Unreleased]
 
+## [1.6.0] — 2026-10-08
+
+Agent-skills conformance pass. Researched official guidance (agentskills.io spec; Anthropic skill
+authoring docs; opencode skills/commands/rules docs) and corrected a claim the kit was getting
+**wrong**.
+
+### Corrected — the kit claimed it could enforce things. It cannot.
+The kit said each step's **"enforceable rules"** are prepended to the commands. Official guidance
+contradicts this: *"Claude treats [memory/skills] as **context, not enforced configuration**. To
+block an action regardless of what Claude decides, use a PreToolUse hook."* Commands are prompt
+text; they buy **deterministic invocation, not deterministic compliance**. Reworded everywhere
+(skill, README, `/speckit`, installer comments) and the skill now carries an explicit table:
+
+| You want | Use |
+| --- | --- |
+| a rule to be *present* whenever a step runs | a command (this kit) |
+| a rule to be *followed* reliably | a command, and check the artifact afterwards |
+| a rule that *cannot* be violated | a hook or a permission — not a command, and not the skill |
+
+This matters beyond wording: it decides where a genuinely must-not-fail rule belongs, and the honest
+answer is *not here*. The kit's real offer is narrower and true — the rule is in front of the model
+at the moment it acts, instead of behind a ~60% trigger.
+
+### Changed
+- **Skill description rewritten in the third person.** Official guidance: *"Always write in third
+  person. The description is injected into the system prompt."* It opened with "Use this skill for…"
+  (second-person imperative) and now opens with the what — "Spec-driven development for software
+  work in a repository containing a `.specify/` directory…". 506 → 632 chars, still well inside the
+  1024 limit.
+
+  **Measured after the change: 7/10 should-trigger (70%)**, against 6/10 (60%) for the previous
+  description on the same model family. **Do not read that as a 10-point win.** The two runs used
+  different model slugs (the old one, `opencode-go/space-bunny-free`, has since been retired), and
+  per-query variance swamps the delta — `st-06` swung from 1/3 to 3/3 on a wording change that was
+  made for *style conformance*, not for triggering. At n=3 these are not distinguishable. What the
+  run does support is that the change **did not regress** triggering, which was the real risk of
+  touching the trigger surface for a style reason.
+- **References now carry an explicit read trigger** — a `Read this / When` table, per the authoring
+  checklist ("make the read trigger explicit; refs one level deep").
+
+### Verified
+- **Frontmatter is spec-portable.** Only spec fields are used (`name`, `description`, `license`,
+  `metadata`); `version` stays nested under `metadata` as a quoted string. This is load-bearing:
+  opencode **silently ignores** non-spec fields (so a stray top-level field looks like it works and
+  does nothing), and Claude Code packaging hard-errors on them. Now gated.
+
+### Added — gate assertions (6 new)
+- frontmatter uses only spec fields; `metadata` values are strings
+- description is third person (fails on `Use this` / `You ` / `I ` openings)
+- **no "enforceable rules" claim** anywhere in skill / README / `/speckit`
+- every reference file is linked *and* the `Read this / When` table is present
+
+### Sources
+agentskills.io/specification · platform.claude.com skill authoring best-practices · Claude Code
+skills + memory docs · opencode skills/commands/rules docs.
+
+### Open (not done — P2, from the same research)
+- The trigger eval measures **trigger accuracy only**, with **no no-skill baseline** and **no
+  outcome rubric**. Official methodology wants ≥3 end-to-end scenarios with `expected_behavior`
+  rubrics, run against a baseline, across ≥2 models. Trigger rate ≠ skill value; a skill can fire
+  100% and change nothing.
+- The **0.5 threshold is this kit's own** invention, not standard. Recorded as an internal tripwire.
+- The measured ~60% may be measuring the **harness** (in opencode the agent must *choose* to call
+  the skill tool from a listing), not the description. Do not attribute all of it to wording.
+
 ## [1.5.0] — 2026-10-06
 
 ### Added

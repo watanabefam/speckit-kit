@@ -1,5 +1,5 @@
 ---
-description: Start spec-driven development — classify the request, pick the smallest workflow that fits, then route to the right step. The deterministic entry point; use this instead of relying on the skill auto-loading.
+description: Start spec-driven development — classify the request, pick the smallest workflow that fits, then route to the right step. The reliable entry point; use this instead of relying on the skill auto-loading.
 ---
 
 # Spec-Driven Development — entry point
@@ -7,9 +7,10 @@ description: Start spec-driven development — classify the request, pick the sm
 This command is the **judgement layer**. Spec Kit's `/speckit.*` commands supply the mechanics.
 
 It exists because the `spec-driven-development` skill loads on roughly 60% of relevant requests —
-skill matching is semantic, so it is a probability surface. Invoking this command is deterministic:
-you typed it, so it ran. **When you want the workflow to apply, invoke this rather than hoping the
-skill fires.**
+skill matching is semantic, so it is a probability surface. Invoking this command is reliable to
+*invoke*: you typed it, so it ran. (It is not reliable to *obey* — this is prompt text like any
+other. A rule that must not be violable needs a hook or a permission, not a command.) **When you
+want the workflow to apply, invoke this rather than hoping the skill fires.**
 
 ## 1. Classify, then choose
 
