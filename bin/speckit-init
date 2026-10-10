@@ -104,6 +104,41 @@ else
   die "entry-point source missing at $ENTRY_SRC"
 fi
 
+# --- 2c. Hooks: the one layer that can actually enforce ------------------------
+# Everything else in this kit is prompt text — the model can deviate. These two
+# hooks run below that layer and cannot be talked out of it:
+#   1. block `git commit --no-verify` (the documented bypass)
+#   2. block hand-edits to generated files (silently lost on the next init)
+# Both are verified to fire. They need the `opencode-yaml-hooks` plugin; without it
+# the file is inert, which is why we say so rather than installing it quietly.
+HOOK_SRC="$KIT_ROOT/hooks/speckit-hooks.yaml"
+HOOK_DST="$ROOT/.opencode/hook/hooks.yaml"
+HOOK_PLUGIN="opencode-yaml-hooks"
+if [[ -f "$HOOK_SRC" ]]; then
+  # Is the plugin registered anywhere the agent will read it?
+  PLUGIN_SEEN=false
+  for cfg in "$ROOT/opencode.json" "$ROOT/opencode.jsonc" \
+             "$HOME/.config/opencode/opencode.json" "$HOME/.config/opencode/opencode.jsonc"; do
+    [[ -f "$cfg" ]] && grep -q "$HOOK_PLUGIN" "$cfg" 2>/dev/null && PLUGIN_SEEN=true
+  done
+  mkdir -p "$ROOT/.opencode/hook"
+  if [[ ! -f "$HOOK_DST" ]]; then
+    cp "$HOOK_SRC" "$HOOK_DST"
+    say "installed project hooks (block --no-verify; protect generated files)"
+  elif cmp -s "$HOOK_SRC" "$HOOK_DST"; then
+    say "project hooks already current"
+  else
+    # Never clobber a hooks file we did not write — the project's own hooks live there.
+    warn "existing .opencode/hook/hooks.yaml left untouched (it is not ours)."
+    warn "  to adopt the kit's two hooks, merge them from $HOOK_SRC"
+  fi
+  if [[ -f "$HOOK_DST" ]] && ! $PLUGIN_SEEN; then
+    warn "hooks installed but INERT: the '$HOOK_PLUGIN' plugin is not in any opencode config."
+    warn "  activate with:  opencode plugin $HOOK_PLUGIN   (or add it to the \"plugin\" array)"
+    warn "  until then they do nothing — which is safe, but is not enforcement."
+  fi
+fi
+
 # --- 3. Preset (template addenda + command contributions) ---------------------
 # Uses `preset update` when the preset is already installed — that is the idiomatic
 # replace flow (remove + add), and it is what keeps an existing project current.
@@ -203,6 +238,18 @@ It carries the workflow, approval gates, traceability and verification rules.
 **Prefer `/speckit`.** It is the reliable entry point: it classifies the request, picks the
 smallest workflow that fits, and routes to the right step. The skill above loads on roughly 60% of
 relevant requests — invoke `/speckit` when you need the workflow to apply for certain.
+
+## Two rules that are enforced, not advised
+
+`.opencode/hook/hooks.yaml` (requires the `opencode-yaml-hooks` plugin) runs below the prompt layer,
+so unlike everything above it cannot be talked out of:
+
+- **`git commit --no-verify` is blocked.** Do not try to skip the project's checks, and do not route
+  around this with an equivalent — fix what the check is complaining about, or run the check
+  directly to see the failure.
+- **Generated files are not hand-edited.** `.opencode/commands/speckit*.md`, `.specify/scripts/`,
+  `.specify/templates/` and `.specify/presets/` are regenerated and an edit there is lost. Change
+  the kit instead. `.specify/memory/constitution.md` and `specs/` are yours to edit.
 
 ## If you cannot invoke `/speckit.*` commands
 

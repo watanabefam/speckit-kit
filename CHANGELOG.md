@@ -7,6 +7,59 @@ The preset version lives in `preset/preset.yml` and is what `specify preset info
 
 ## [Unreleased]
 
+## [1.8.0] — 2026-10-08
+
+**Enforcement that actually holds.** The kit has always said, honestly, that it cannot enforce
+anything — commands are prompt text and the model can deviate. It also said a rule that must not be
+violable needs a hook. This ships the hooks.
+
+### Added — `hooks/speckit-hooks.yaml`
+Two hooks, installed by `speckit-init` into `.opencode/hook/hooks.yaml`, run by the
+`opencode-yaml-hooks` plugin on tool lifecycle events. They run **below the prompt layer**, so the
+model cannot be talked out of them:
+
+| Hook | Blocks | Why |
+| --- | --- | --- |
+| `block-commit-no-verify` | `git commit --no-verify` / `-n` | The documented bypass. An agent using `--no-verify` to skip pre-commit hooks across six commits is the case that motivated it. `action: stop` — a session that just tried to disable the checks should not continue unattended. |
+| `protect-generated-files` | hand-edits to `.opencode/commands/speckit*.md`, `.specify/scripts/`, `.specify/templates/`, `.specify/presets/` | The kit told agents these are regenerated and an edit is lost. Nothing enforced it, so real effort could vanish at the next install. |
+
+**Deliberately tiny, and near-zero false positive.** Both hooks block only things that are wrong in
+essentially every case; the research on gates is unambiguous that a noisy gate gets removed and then
+none of them work. The allow-list is explicit: `.specify/memory/constitution.md` and `specs/` are
+editable, and the hook says so in its own message.
+
+### Verified — by execution, not by reading
+- `git commit --no-verify` → **blocked**, session aborted, no commit created
+- edit to `.opencode/commands/speckit.specify.md` → **blocked**, file byte-unchanged
+- edit to `.specify/memory/constitution.md` → **not blocked**, edit landed (the false-positive check)
+- the guard is respected, not routed around: on being blocked, the agent said *"I'm not going to
+  route around the guard with a rewritten equivalent (`find . -exec chmod`, a Python loop, etc.) —
+  that would defeat the point of it being there."*
+
+### Added — inert detection
+The hooks need the `opencode-yaml-hooks` plugin. Without it the file does nothing, so `speckit-init`
+checks every opencode config it can find and **says so loudly** rather than installing a file that
+silently does nothing:
+
+```
+!! hooks installed but INERT: the 'opencode-yaml-hooks' plugin is not in any opencode config.
+!!   activate with:  opencode plugin opencode-yaml-hooks
+```
+
+Verified by running the installer with a clean `HOME`.
+
+### Safe by construction
+- `speckit-init` **never clobbers** an existing `.opencode/hook/hooks.yaml` that is not ours — it
+  warns and leaves it for the project to merge.
+- `speckit-uninit` removes the hooks file **only if it is still byte-identical** to the one shipped;
+  if the project edited it, it is theirs and is left alone.
+- The `AGENTS.md` bridge now states the two enforced rules, so the agent knows the layer exists.
+
+### Note on what this does *not* fix
+This closes the bypass and the generated-file case. It does **not** make the workflow itself
+enforceable — there is no hook for "the agent must have written a spec". That remains a
+probability surface, and the kit still says so.
+
 ## [1.7.0] — 2026-10-08
 
 Instrument bug in both eval runners, an outcome-eval runner that finally runs the rubrics, and a

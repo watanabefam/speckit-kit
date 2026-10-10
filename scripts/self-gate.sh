@@ -86,6 +86,40 @@ else
   bad "commands/speckit.md missing — there is no deterministic entry point"
 fi
 
+hdr "1f. hooks — the only layer that can actually enforce"
+HK="$ROOT/hooks/speckit-hooks.yaml"
+if [ -f "$HK" ]; then
+  ok "hooks/speckit-hooks.yaml present"
+  # The two hooks, and the property that makes them enforcement rather than advice.
+  for needle in "block-commit-no-verify" "protect-generated-files" "action: stop" "exit 2"; do
+    if grep -q "$needle" "$HK"; then ok "hook file carries: $needle"; else bad "hook file missing: $needle"; fi
+  done
+  # It must not protect the files that are MEANT to be edited.
+  if grep -q ".specify/memory/constitution.md" "$HK" && grep -q "ALLOW" "$HK"; then
+    ok "hook file documents the allow-list (constitution + specs are editable)"
+  else
+    bad "hook file does not state what stays editable — false positives start here"
+  fi
+  # The installer must ship it AND say when it is inert.
+  if grep -q "speckit-hooks.yaml" "$ROOT/bin/speckit-init"; then
+    ok "installer installs the hooks"
+  else
+    bad "installer never installs hooks/speckit-hooks.yaml"
+  fi
+  if grep -qi "inert" "$ROOT/bin/speckit-init"; then
+    ok "installer warns when the hooks plugin is absent (inert, not silently useless)"
+  else
+    bad "installer would install hooks without checking the plugin — they would do nothing silently"
+  fi
+  if grep -q "hooks.yaml" "$ROOT/bin/speckit-uninit"; then
+    ok "uninit removes the hooks it installed"
+  else
+    bad "uninit leaves .opencode/hook/hooks.yaml behind"
+  fi
+else
+  bad "hooks/speckit-hooks.yaml missing — the kit claims it cannot enforce anything, and this is the fix"
+fi
+
 hdr "1e. novice quickstart"
 QS="$ROOT/QUICKSTART.md"
 if [ -f "$QS" ]; then
