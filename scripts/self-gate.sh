@@ -120,6 +120,49 @@ else
   bad "hooks/speckit-hooks.yaml missing — the kit claims it cannot enforce anything, and this is the fix"
 fi
 
+hdr "1g. drift checker"
+CK="$ROOT/bin/speckit-check"
+if [ -x "$CK" ]; then
+  ok "bin/speckit-check present and executable"
+  # It must be READ-ONLY — it reports, it does not repair. A checker that writes is
+  # a checker nobody runs against a repo they care about.
+  if grep -qE "speckit-init\\\\?\"|rm -rf|cp -" "$CK"; then
+    bad "speckit-check appears to mutate — it must only report"
+  else
+    ok "speckit-check is read-only (no writes, only advises running speckit-init)"
+  fi
+  # It must know about every component the installer ships, or it will report
+  # 'current' while a repo is missing something.
+  missing=""
+  for c in "speckit.md" "hooks/speckit-hooks.yaml" "AGENTS.md" "preset/preset.yml"; do
+    grep -q "$c" "$CK" || missing="$missing $c"
+  done
+  if [ -z "$missing" ]; then
+    ok "speckit-check covers entry point, hooks, bridge and preset"
+  else
+    bad "speckit-check does not check:$missing"
+  fi
+  # Functional: the kit's OWN repo must be reported as needing the update (it is
+  # pinned at an older version on purpose), and a bare .specify/ dir must not crash.
+  if bash "$CK" "$ROOT" >/dev/null 2>&1; then
+    bad "speckit-check reports the kit's own (stale) repo as current — detection is broken"
+  else
+    rc=$?
+    if [ "$rc" = "1" ]; then ok "speckit-check correctly flags drift"; else bad "speckit-check exited $rc on drift (want 1)"; fi
+  fi
+  TMPD="$(mktemp -d)"; mkdir -p "$TMPD/.specify"
+  rc=2
+  bash "$CK" "$TMPD" >/dev/null 2>&1 || rc=$?
+  if [ "$rc" = "2" ]; then
+    ok "speckit-check exits 2 on a non-kit .specify/ project (not the kit's, nothing to compare)"
+  else
+    bad "speckit-check exited $rc on a non-kit project (want 2)"
+  fi
+  rm -rf "$TMPD"
+else
+  bad "bin/speckit-check missing — no way to tell whether an existing repo needs the update"
+fi
+
 hdr "1e. novice quickstart"
 QS="$ROOT/QUICKSTART.md"
 if [ -f "$QS" ]; then

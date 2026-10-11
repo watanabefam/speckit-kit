@@ -1,0 +1,147 @@
+#!/usr/bin/env bash
+# speckit-check — report drift between a project and this kit. Changes nothing.
+#
+# Answers: "does this repo need the updated kit applied?" and, if so, what exactly
+# would change. Read-only by design: `speckit-init` is the thing that writes, and it
+# is the thing you run once you have decided.
+#
+# Usage:
+#   speckit-check [path]        one project
+#   speckit-check --all <dir>   every project under <dir> that has the kit installed
+#
+# Exit: 0 = current, 1 = drift found, 2 = not a Spec Kit project.
+set -uo pipefail
+
+SELF="$(python3 -c 'import os,sys;print(os.path.realpath(sys.argv[1]))' "$0" 2>/dev/null || echo "$0")"
+KIT_ROOT="$(cd "$(dirname "$SELF")/.." && pwd)"
+KIT_VERSION="$(grep -E '^\s+version:' "$KIT_ROOT/preset/preset.yml" 2>/dev/null | head -1 | sed 's/.*"\(.*\)".*/\1/')"
+PRESET_ID="spec-driven-development"
+
+# --- args ---------------------------------------------------------------------
+MODE="one"
+TARGET="."
+if [ "${1:-}" = "--all" ]; then
+  MODE="all"; TARGET="${2:-.}"
+elif [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
+  sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'; exit 0
+else
+  TARGET="${1:-.}"
+fi
+
+if command -v tput >/dev/null 2>&1 && [ -t 1 ]; then G=$(tput setaf 2); Y=$(tput setaf 3); R=$(tput setaf 1); D=$(tput dim); X=$(tput sgr0); else G=""; Y=""; R=""; D=""; X=""; fi
+
+# --- one project --------------------------------------------------------------
+check_one() {
+  local root; root="$(cd "$1" 2>/dev/null && pwd)" || return 2
+  local drift=0 out=""
+
+  local preset_dir="$root/.specify/presets/$PRESET_ID"
+  if [ ! -d "$root/.specify" ]; then
+    return 2
+  fi
+  if [ ! -d "$preset_dir" ]; then
+    echo "  not the kit's — has .specify/ but no $PRESET_ID preset"
+    return 2
+  fi
+
+  local installed; installed="$(grep -E '^\s+version:' "$preset_dir/preset.yml" 2>/dev/null | head -1 | sed 's/.*"\(.*\)".*/\1/')"
+  installed="${installed:-unknown}"
+
+  line() { out+="  $1"$'\n'; }
+
+  # 1. preset version + content -------------------------------------------------
+  if [ "$installed" = "$KIT_VERSION" ]; then
+    line "${G}ok${X}    preset version $installed"
+  else
+    line "${R}DRIFT${X} preset version ${installed} → ${KIT_VERSION}"; drift=1
+  fi
+  if diff -rq "$KIT_ROOT/preset" "$preset_dir" >/dev/null 2>&1; then
+    line "${G}ok${X}    preset content identical"
+  else
+    # list the files that differ, so the change is concrete
+    local n
+    n="$(diff -rq "$KIT_ROOT/preset" "$preset_dir" 2>/dev/null | wc -l | tr -d ' ')"
+    line "${Y}DIFF${X}  preset content differs in $n file(s) — re-install applies the rest"
+    drift=1
+  fi
+
+  # 2. /speckit entry point -----------------------------------------------------
+  local entry="$root/.opencode/commands/speckit.md"
+  if [ ! -f "$entry" ]; then
+    line "${R}MISS${X}  /speckit entry point (added in 1.5.0)"; drift=1
+  elif cmp -s "$KIT_ROOT/commands/speckit.md" "$entry"; then
+    line "${G}ok${X}    /speckit entry point current"
+  else
+    line "${Y}DIFF${X}  /speckit entry point differs from the kit's"; drift=1
+  fi
+
+  # 3. hooks --------------------------------------------------------------------
+  local hooks="$root/.opencode/hook/hooks.yaml"
+  if [ ! -f "$hooks" ]; then
+    line "${R}MISS${X}  project hooks (added in 1.8.0) — no enforcement layer in this repo"; drift=1
+  elif cmp -s "$KIT_ROOT/hooks/speckit-hooks.yaml" "$hooks"; then
+    line "${G}ok${X}    project hooks current"
+  else
+    line "${Y}DIFF${X}  project hooks present but differ (possibly project-edited — check before overwriting)"; drift=1
+  fi
+
+  # 4. AGENTS.md bridge ---------------------------------------------------------
+  local agents="$root/AGENTS.md"
+  if [ ! -f "$agents" ]; then
+    line "${R}MISS${X}  AGENTS.md bridge"; drift=1
+  else
+    grep -q "Prefer \`/speckit\`" "$agents" \
+      && line "${G}ok${X}    AGENTS.md bridge names /speckit" \
+      || { line "${Y}DIFF${X}  AGENTS.md bridge predates /speckit"; drift=1; }
+    grep -q "enforced, not advised" "$agents" \
+      && line "${G}ok${X}    AGENTS.md documents the enforced rules" \
+      || { line "${Y}DIFF${X}  AGENTS.md does not mention the hooks (added in 1.8.0)"; drift=1; }
+  fi
+
+  # 5. command contributions ----------------------------------------------------
+  # The composed commands carry the preset's prepends. If the preset drifted, so did
+  # these — but check the ones that exist so a missing file is visible too.
+  local missing=0
+  for c in specify plan tasks implement converge; do
+    [ -f "$root/.opencode/commands/speckit.$c.md" ] || missing=$((missing+1))
+  done
+  [ "$missing" -eq 0 ] \
+    && line "${G}ok${X}    all 5 contributed commands present" \
+    || { line "${R}MISS${X}  $missing contributed command file(s)"; drift=1; }
+
+  printf '%s' "$out"
+  return $drift
+}
+
+# --- run ----------------------------------------------------------------------
+if [ "$MODE" = "all" ]; then
+  echo "${D}kit $KIT_VERSION · scanning $TARGET${X}"
+  echo
+  found=0; stale=0
+  # A project is one with a .specify/ dir; the checker decides if it is ours.
+  while IFS= read -r d; do
+    root="$(dirname "$d")"
+    found=$((found+1))
+    printf "%s\n" "${D}$root${X}"
+    check_one "$root"; rc=$?
+    [ "$rc" = "1" ] && stale=$((stale+1))
+    [ "$rc" = "2" ] && printf "  ${D}skipped — not a Spec Kit project${X}\n"
+    echo
+  done < <(find "$TARGET" -maxdepth 6 -type d -name ".specify" 2>/dev/null | sort)
+  echo "────────────────────────────────────────────"
+  echo "$found project(s) with .specify/ · $stale need the updated kit"
+  [ "$stale" -eq 0 ] && exit 0 || exit 1
+else
+  root="$(cd "$TARGET" 2>/dev/null && pwd)" || { echo "not a directory: $TARGET" >&2; exit 2; }
+  echo "${D}$root · kit $KIT_VERSION${X}"
+  check_one "$root"; rc=$?
+  if [ "$rc" = "2" ]; then
+    echo "  not a Spec Kit project (no .specify/)"
+  elif [ "$rc" = "1" ]; then
+    echo
+    echo "  → needs the updated kit:  speckit-init \"$root\""
+  else
+    echo "  → current, nothing to do"
+  fi
+  exit $rc
+fi

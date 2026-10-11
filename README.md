@@ -196,6 +196,16 @@ in `preset/` at that moment. `git pull` this repo, then re-run `speckit-init` pe
 **Check what a project has** — `specify preset info spec-driven-development` reports the installed
 version, so drift across projects is visible.
 
+**Check whether a repo is current** — `speckit-check` reports drift against the kit, changing
+nothing:
+
+```bash
+speckit-check ~/path/to/repo
+speckit-check --all ~/Documents/GitHub    # every kit-managed project under a dir
+```
+
+Exits 0 = current, 1 = needs the update (re-run `speckit-init`), 2 = not a Spec Kit project.
+
 **Reverse it** — `speckit-uninit` removes the scaffolding and nothing else:
 
 ```bash
