@@ -232,12 +232,16 @@ read -r -d '' BRIDGE <<'BRIDGE_EOF' || true
 This project uses Spec Kit. Requirements are written down before code is written, and the
 artifacts under `specs/` are the source of truth.
 
+**First act of any session in this project: check the workflow before acting.** If the request
+is software work, `spec-driven-development` applies — do not improvise from memory. Prefer
+`.opencode/commands/speckit.md` (the `/speckit` entry point): it classifies the request, picks the
+smallest workflow that fits, and routes. You are not exempt because the task looks simple.
+
 **Load the `spec-driven-development` skill before specifying, planning, or implementing.**
 It carries the workflow, approval gates, traceability and verification rules.
 
-**Prefer `/speckit`.** It is the reliable entry point: it classifies the request, picks the
-smallest workflow that fits, and routes to the right step. The skill above loads on roughly 60% of
-relevant requests — invoke `/speckit` when you need the workflow to apply for certain.
+**The skill loads on roughly 60% of relevant requests — `/speckit` is the reliable path.** Invoke
+it when you need the workflow to apply for certain.
 
 ## Two rules that are enforced, not advised
 

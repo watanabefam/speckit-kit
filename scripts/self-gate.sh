@@ -478,6 +478,19 @@ need("Review the parking lot" in conv, "converge command reviews the parking lot
 for outcome in ("promote", "keep parked", "delete"):
     need(outcome in conv, f"converge names the parking outcome: {outcome}")
 
+# --- Progress ledger: state on disk, not in conversation -------------------
+impl2 = open(os.path.join(base, "commands/speckit.implement.prepend.md"), encoding="utf-8").read()
+conv2 = open(os.path.join(base, "commands/speckit.converge.prepend.md"), encoding="utf-8").read()
+need("progress ledger" in impl2, "implement command requires a progress ledger")
+need("conversation memory does not survive compaction" in impl2,
+     "ledger rule states the compaction rationale (the failure it prevents)")
+need("Resume rule" in impl2, "ledger defines how a fresh session resumes")
+need("Task <N>: complete" in impl2, "ledger completion marker carries evidence")
+need("Ruling:" in impl2, "ledger records decisions with a Ruling: line")
+need("archive it and start fresh" in impl2, "ledger forbids merging two plans' ledgers")
+need("Close the progress ledger" in conv2, "converge closes the ledger")
+need("Status: complete" in conv2, "closing tombstones the ledger, does not delete it")
+
 # --- Property-test tasks (FR-007, FR-012) ---
 need("Property-Based Test Tasks" in tasks, "tasks addendum has the property-test rules")
 need("One task per P-ID" in tasks, "tasks addendum states one task per property")

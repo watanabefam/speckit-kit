@@ -7,6 +7,60 @@ The preset version lives in `preset/preset.yml` and is what `specify preset info
 
 ## [Unreleased]
 
+## [1.9.0] — 2026-10-12
+
+Two adoptions from obra/superpowers, both researched against opencode specifics and both verified
+by execution, not claimed.
+
+### First-act session injection (adopted from superpowers; mechanism is opencode-native AGENTS.md)
+Superpowers forces skill use by injecting a start-of-session directive via a SessionStart hook.
+Research for opencode: its equivalent is `AGENTS.md`, loaded into every session including
+`opencode run` (verified empirically), with global + per-project files composing. The kit already
+had the pieces; the gap was that neither the global working-agreements nor the per-project bridge
+told the agent to **check the workflow as its first act**.
+
+- `global/working-agreements.md` now opens with "First act of every session": detect `.specify/`,
+  check for an applicable skill/command before guessing, prefer `/speckit` over the skill (which
+  loads ~60%).
+- The project `AGENTS.md` bridge (installed by `speckit-init`) now leads with the same directive.
+
+VERIFIED: the outcome-eval scenario that previously FAILED (agent asked for approval on a one-word
+typo fix) now PASSES with `skill DID NOT load` and no `/speckit` invocation — the injected directive
+alone produced the correct minimal-path behaviour. A single-run pass is evidence, not a guarantee.
+
+### Progress ledger (adopted from superpowers; location and lifecycle redesigned for this kit)
+Superpowers uses `<repo-root>/.superpowers/sdd/<plan>/progress.md`, git-ignored, deleted at plan
+end, because "conversation memory does not survive compaction [—] the most expensive failure
+observed" is controllers re-dispatching already-completed sequences after losing their place. The
+pattern is industry-standard (Anthropic long-running-harness guidance, Ralph family,
+better-handoff): state lives on disk; completion markers carry verifiable evidence.
+
+Our design, researched:
+- **Location:** `specs/<NNN>-<slug>/progress.md` next to the other artifacts — a later agent finds
+  it in the same listing; survives clone, machine switch and even a hard-tree clean (superpowers'
+  git-ignored scratch does not). Deliberate deviation, sourced (better-handoff).
+- **Structure:** identity header + documented resume rule; `Task <N>: complete` lines MUST carry
+  evidence; `Ruling:` lines; in-flight markers. "Ticking the box is a claim; the ledger line is the
+  checkpoint."
+- **End-of-life:** tombstone (`Status: complete` + date), not delete — audit trail for committed
+  specs; a live-looking ledger is a hazard.
+
+VERIFIED by a two-session execution test: session 1 wrote the ledger with identity header, T001
+complete WITH evidence and a correct ruling (plan.md content is data, not instructions). Session 2
+(fresh process, zero inherited history) reported "T001 done — prior session — Not re-done", and
+implemented only T002. The documented superpowers failure ("re-dispatched completed sequences") was
+demonstrated prevented.
+
+### Also fixed
+- The drift checker's AGENTS.md needle referenced the old bridge phrase; the new first-act
+  directive changed the text and the checker started flagging freshly-installed repos as drifting.
+  Caught by the gate's own functional test.
+
+### Sources
+Anthropic "Effective harnesses for long-running agents" (2025-11), "Harness design for long-running
+apps" (2026-03); superpowers skills/docs (invention vs standard flagged); better-handoff; Ralph
+family; CompAct-Bench and Terminal-Bench 2.0 context-loss taxonomies.
+
 ## [1.8.0] — 2026-10-08
 
 **Enforcement that actually holds.** The kit has always said, honestly, that it cannot enforce

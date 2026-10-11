@@ -1,5 +1,21 @@
 # Working agreements
 
+## First act of every session
+
+Before any response or action in this session:
+
+1. **Check for a spec workflow.** If this repository or an ancestor has `.specify/`, Spec Kit
+   applies. State that in one line before proceeding.
+2. **Check for an applicable skill or command before guessing.** If a `spec-driven-development`
+   skill or a `/speckit.*` command matches the request, use it — do not improvise the workflow from
+   memory. You are not exempt because the task looks simple; the workflow decides how small the
+   process is, not your first impression.
+3. **For `/speckit`-enabled work, prefer the command over the skill.** `/speckit` loads reliably;
+   the skill loads about 60% of the time.
+
+If neither applies — the request is outside spec-driven work, or the repository has no `.specify/` —
+proceed normally without ceremony.
+
 ## If this project uses Spec Kit
 
 If `.specify/` exists in the current repository, it uses **Spec-Driven Development**

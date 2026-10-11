@@ -90,9 +90,9 @@ check_one() {
   if [ ! -f "$agents" ]; then
     line "${R}MISS${X}  AGENTS.md bridge"; drift=1
   else
-    grep -q "Prefer \`/speckit\`" "$agents" \
-      && line "${G}ok${X}    AGENTS.md bridge names /speckit" \
-      || { line "${Y}DIFF${X}  AGENTS.md bridge predates /speckit"; drift=1; }
+    grep -qE "First act of any session in this project|Prefer \`/speckit\`" "$agents" \
+      && line "${G}ok${X}    AGENTS.md bridge carries the first-act directive" \
+      || { line "${Y}DIFF${X}  AGENTS.md bridge predates the first-act directive"; drift=1; }
     grep -q "enforced, not advised" "$agents" \
       && line "${G}ok${X}    AGENTS.md documents the enforced rules" \
       || { line "${Y}DIFF${X}  AGENTS.md does not mention the hooks (added in 1.8.0)"; drift=1; }
