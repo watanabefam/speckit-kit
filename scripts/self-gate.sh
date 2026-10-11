@@ -142,14 +142,38 @@ if [ -x "$CK" ]; then
   else
     bad "speckit-check does not check:$missing"
   fi
-  # Functional: the kit's OWN repo must be reported as needing the update (it is
-  # pinned at an older version on purpose), and a bare .specify/ dir must not crash.
-  if bash "$CK" "$ROOT" >/dev/null 2>&1; then
-    bad "speckit-check reports the kit's own (stale) repo as current — detection is broken"
+  # Functional: a deliberately-stale repo must be flagged, a current one must not.
+  # (Previously this checked the kit's own repo, which was kept stale on purpose;
+  # the user has since approved updating it, so the fixture is stale by construction.)
+  TD="$(mktemp -d)"; git init -q "$TD" 2>/dev/null
+  touch "$TD/README.md"; git -C "$TD" add -A
+  git -C "$TD" -c user.email=e@e -c user.name=e commit -qm init
+  "$ROOT/bin/speckit-init" "$TD" >/dev/null 2>&1 || true
+  if bash "$CK" "$TD" >/dev/null 2>&1; then
+    ok "speckit-check reports a freshly-installed repo as current"
   else
-    rc=$?
-    if [ "$rc" = "1" ]; then ok "speckit-check correctly flags drift"; else bad "speckit-check exited $rc on drift (want 1)"; fi
+    bad "freshly-installed repo reported as drifting — detection or install is broken"
   fi
+  # now make it stale on purpose: bump the installed preset version past the kit's.
+  # Must match the INDENTED `version:` under the preset, not `schema_version:`
+  # which also ends in "_version:" and would swallow the first replace.
+  python3 - "$TD/.specify/presets/spec-driven-development/preset.yml" <<'PY'
+import re, sys
+p = sys.argv[1]
+s = open(p).read()
+s = re.sub(r'^(\s+)version:\s+"([^"]+)"\s*$',
+                lambda m: m.group(1) + 'version: "9.9.9"', s, count=1, flags=re.M)
+open(p, "w").write(s)
+PY
+  grep -q 'version: "9.9.9' "$TD/.specify/presets/spec-driven-development/preset.yml" \
+    || bad "test fixture: could not make the installed preset stale before checking"
+  rc=2; bash "$CK" "$TD" >/dev/null 2>&1 || rc=$?
+  if [ "$rc" = "1" ]; then
+    ok "speckit-check flags a deliberately-stale repo (drift detected)"
+  else
+    bad "stale repo reported as current (exit $rc, want 1) — detection is broken"
+  fi
+  rm -rf "$TD"
   TMPD="$(mktemp -d)"; mkdir -p "$TMPD/.specify"
   rc=2
   bash "$CK" "$TMPD" >/dev/null 2>&1 || rc=$?

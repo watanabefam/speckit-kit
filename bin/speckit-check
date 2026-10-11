@@ -55,14 +55,14 @@ check_one() {
   else
     line "${R}DRIFT${X} preset version ${installed} → ${KIT_VERSION}"; drift=1
   fi
-  if diff -rq "$KIT_ROOT/preset" "$preset_dir" >/dev/null 2>&1; then
-    line "${G}ok${X}    preset content identical"
-  else
-    # list the files that differ, so the change is concrete
+  if diff -rq "$KIT_ROOT/preset" "$preset_dir" 2>/dev/null | grep -v "\.composed" >/dev/null; then
+    # ignore .composed/ — spec-kit generates it during install, so it always differs
     local n
-    n="$(diff -rq "$KIT_ROOT/preset" "$preset_dir" 2>/dev/null | wc -l | tr -d ' ')"
+    n="$(diff -rq "$KIT_ROOT/preset" "$preset_dir" 2>/dev/null | grep -vc "\.composed")"
     line "${Y}DIFF${X}  preset content differs in $n file(s) — re-install applies the rest"
     drift=1
+  else
+    line "${G}ok${X}    preset content identical"
   fi
 
   # 2. /speckit entry point -----------------------------------------------------

@@ -25,6 +25,18 @@ them behind an optimistic summary.
 Verify the plan's **Must Not Change** items are actually unchanged — a diff against those files
 is the evidence, not an assertion that you were careful.
 
+### Review the parking lot
+
+The spec's `Future Work (parking lot)` is a queue, not a graveyard. At close-out, walk it and give
+every item one of three outcomes:
+
+- **promote** — it is worth doing; it becomes its own spec
+- **keep parked** — with a reason and a revisit condition
+- **delete** — deliberately, because it is no longer wanted
+
+An item that gets none of these has been silently abandoned, which is the failure mode the parking
+lot exists to prevent. Report the count and what happened to each.
+
 ### Handoff discipline
 
 Close with what changed, what remains open, what needs approval, what was verified and how, and
