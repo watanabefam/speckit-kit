@@ -7,6 +7,39 @@ The preset version lives in `preset/preset.yml` and is what `specify preset info
 
 ## [Unreleased]
 
+## [1.9.1] — 2026-10-12
+
+Adversarial security audit of the no-verify hook. The audit found — and this release fixes —
+an actual bypass class that a keyword-level test could not have caught.
+
+### Security fix: no-verify guard was string-anchored, bypassable by flag position
+The guard anchored on `git[[:space:]]+commit`, so any flags between `git` and `commit`
+bypassed it entirely:
+- `git -c core.hooksPath=/dev/null commit -m x`
+  (points Git at an empty hooks dir — no-verify by another name)
+- `git --no-pager --git-dir=.git --work-tree=. commit -n -m x`
+
+Verified empirically: in a scratch run, both commands EXECUTED (only git's own "nothing
+staged" stopped the commit, not our guard). Fix: the predicate is now token-based (awk)
+and blocks three unambiguous signals anywhere in a git command — `--no-verify`,
+`core.hooksPath=<something>`, and a `commit`/`commit-tree` subcommand followed by `-n`.
+Unit-tested 13 cases: 8 bypass forms blocked, 5 benign uses (`git log -n 5`, `git diff -n`,
+`grep -n`, `npm -n`, `git config core.hooksPath` read) allowed.
+
+### Gate upgrade: the gate now tests BEHAVIOR, not keywords
+The audit found the §1f assertions only checked the hook *contains* the right words — a
+weakened guard (bypass signal removed) still passed the gate. Two holes, same shape as the
+`$PWD` bug: an instrument whose failure mode the gate doesn't surface. §1f now extracts the
+exact awk the hook ships and exercises it: 4 bypass forms must BLOCK, 3 benign forms must
+ALLOW. Verified: weakening the hook now FAILs the gate with the precise bypass named.
+
+### Scope of the audit (everything checked, nothing else found)
+- drift checker: all 4 repos current/known-stale; gate's no-repo-drift fixture verified
+- generated-file hook: 10 path variants, 5 block / 5 allow — precise
+- gate integrity: fails when hooks file deleted, when ledger rule renamed, when hook
+  predicate weakened
+- two-session ledger + injection claims re-checked, unchanged by this release
+
 ## [1.9.0] — 2026-10-12
 
 Two adoptions from obra/superpowers, both researched against opencode specifics and both verified

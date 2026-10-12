@@ -94,6 +94,38 @@ if [ -f "$HK" ]; then
   for needle in "block-commit-no-verify" "protect-generated-files" "action: stop" "exit 2"; do
     if grep -q "$needle" "$HK"; then ok "hook file carries: $needle"; else bad "hook file missing: $needle"; fi
   done
+  # The no-verify guard must BEHAVE, not just exist. A keyword check passes a hook
+  # that has been weakened into decoration. An adversarial audit against an earlier
+  # version found bypasses (`git -c core.hooksPath=... commit`,
+  # `git --no-pager ... commit -n`) that the keyword checks did NOT catch — the
+  # guard had silently stood aside while still containing the right words. So the
+  # predicate itself is exercised: wget the bypass and benign cases through the
+  # exact awk the hook ships, extracted from the YAML. If the awk is missing or
+  # weakened, one of these fails.
+  AWK="$(python3 - "$HK" <<'PY'
+import re, sys
+raw = open(sys.argv[1]).read()
+m = re.search(r"awk '\n(.*?)\n            '\s*<<<", raw, re.S)
+if not m:
+    m = re.search(r"awk '??(.*?)??<<<", raw, re.S)
+print(m.group(1) if m else "")
+PY
+)"
+  if [ -z "$AWK" ]; then
+    bad "could not extract the no-verify awk predicate from the hook — gate cannot test it"
+  else
+    hk_verdict() { printf '%s' "$1" | awk "$AWK" | grep -q . && echo BLOCK || echo ALLOW; }
+    hk_fail=0
+    for c in "git commit --no-verify -m x" "git commit -n -m x" \
+             "git -c core.hooksPath=/dev/null commit -m x" \
+             "git --no-pager --git-dir=.git --work-tree=. commit -n -m x"; do
+      [ "$(hk_verdict "$c")" = "BLOCK" ] || { bad "no-verify guard ALLOWS bypass: $c"; hk_fail=1; }
+    done
+    for c in "git log -n 5" "git commit -m x" "grep -n foo f"; do
+      [ "$(hk_verdict "$c")" = "ALLOW" ] || { bad "no-verify guard BLOCKS benign: $c"; hk_fail=1; }
+    done
+    [ "$hk_fail" = "0" ] && ok "no-verify predicate blocks 4 bypass forms, allows 3 benign (behavioral, not keywords)"
+  fi
   # It must not protect the files that are MEANT to be edited.
   if grep -q ".specify/memory/constitution.md" "$HK" && grep -q "ALLOW" "$HK"; then
     ok "hook file documents the allow-list (constitution + specs are editable)"
