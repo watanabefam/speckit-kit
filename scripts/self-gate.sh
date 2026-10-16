@@ -186,15 +186,17 @@ if [ -x "$CK" ]; then
   else
     bad "freshly-installed repo reported as drifting — detection or install is broken"
   fi
-  # now make it stale on purpose: bump the installed preset version past the kit's.
-  # Must match the INDENTED `version:` under the preset, not `schema_version:`
-  # which also ends in "_version:" and would swallow the first replace.
+  # now make it stale on purpose — TWO ways, because the checker once handled
+  # version drift but was INVERTED on content drift (a `pipefail` bug it survived
+  # because only the version path was tested).
+  #
+  # (a) version drift
   python3 - "$TD/.specify/presets/spec-driven-development/preset.yml" <<'PY'
 import re, sys
 p = sys.argv[1]
 s = open(p).read()
 s = re.sub(r'^(\s+)version:\s+"([^"]+)"\s*$',
-                lambda m: m.group(1) + 'version: "9.9.9"', s, count=1, flags=re.M)
+           lambda m: m.group(1) + 'version: "9.9.9"', s, count=1, flags=re.M)
 open(p, "w").write(s)
 PY
   grep -q 'version: "9.9.9' "$TD/.specify/presets/spec-driven-development/preset.yml" \
@@ -204,6 +206,17 @@ PY
     ok "speckit-check flags a deliberately-stale repo (drift detected)"
   else
     bad "stale repo reported as current (exit $rc, want 1) — detection is broken"
+  fi
+
+  # (b) CONTENT drift with version UNCHANGED — the inverted-check regression.
+  # Restore the version, then weaken a content file; the checker must still flag it.
+  "$ROOT/bin/speckit-init" "$TD" >/dev/null 2>&1 || true
+  printf '\n# drift probe\n' >> "$TD/.specify/presets/spec-driven-development/commands/speckit.implement.prepend.md"
+  rc=2; bash "$CK" "$TD" >/dev/null 2>&1 || rc=$?
+  if [ "$rc" = "1" ]; then
+    ok "speckit-check flags CONTENT drift at the same version (inverted-check regression)"
+  else
+    bad "content drift at unchanged version reported as current (exit $rc, want 1)"
   fi
   rm -rf "$TD"
   TMPD="$(mktemp -d)"; mkdir -p "$TMPD/.specify"
@@ -252,6 +265,15 @@ if [ -f "$ROOT/CHANGELOG.md" ]; then
     ok "CHANGELOG has an entry for the current preset version ($_v)"
   else
     bad "CHANGELOG has no entry for preset version $_v"
+  fi
+  # The version must be the NEWEST changelog entry, not merely present. A stale
+  # preset version (e.g. left at 1.8.0 through the 1.9.0/1.9.1 releases) passed the
+  # presence check because an old entry still matched. Found by audit.
+  _latest=$(grep -oE '^## \[[0-9]+\.[0-9]+\.[0-9]+\]' "$ROOT/CHANGELOG.md" | head -1 | tr -d '#[] ')
+  if [ "$_v" = "$_latest" ]; then
+    ok "preset version is the newest CHANGELOG release ($_latest)"
+  else
+    bad "preset version $_v is behind the newest CHANGELOG release $_latest"
   fi
 else
   bad "CHANGELOG.md missing"

@@ -7,6 +7,38 @@ The preset version lives in `preset/preset.yml` and is what `specify preset info
 
 ## [Unreleased]
 
+## [1.9.2] — 2026-10-12
+
+The drift checker was inverted, and the preset version was stale. Both found by asking
+"do the repos need updating?" and *checking*, not assuming.
+
+### Fixed — `speckit-check` reported "identical" exactly when content differed
+`if diff -rq … | grep -v … >/dev/null; then` — `diff` exits 1 when files differ (normal), and
+under the script's `set -o pipefail` that 1 propagated through `| grep`, so the `if` took the
+**else** branch and printed *"preset content identical"* whenever content actually differed. The
+checker was inverted. It survived every test because the gate's functional test only exercised
+**version** drift (bump the version → version check fails), never **content** drift.
+
+Fixed by capturing the diff output and testing `[ -n "$d" ]` instead of a pipeline exit code;
+`.composed/` (spec-kit-generated) and `.DS_Store` (macOS metadata) are excluded as noise.
+
+### Fixed — preset version was stale at 1.8.0
+`preset/preset.yml` was bumped through 1.8.0, but the **v1.9.0 and v1.9.1 commits did not bump
+it** — so the kit claimed 1.8.0 while its content was 1.9.0. The gate did not catch this because
+it only asserts that the CHANGELOG *has an entry* for the current version, not that the version is
+the *newest* entry. Now at 1.9.2, and the gate asserts the preset version equals the latest
+CHANGELOG version.
+
+### Consequence — the three applied repos were stale and reported current
+`speckit-kit`, `speckit-sandbox`, `ocr-kit` were missing the v1.9.0 content (progress ledger in
+`implement`/`converge`; the first-act directive in `AGENTS.md`). `speckit-check` said "current"
+because of the inverted content check. Re-applied.
+
+### Added — gate coverage for both bugs
+- §1c now asserts the preset version equals the newest CHANGELOG version (catches a stale bump).
+- §1g's checker test now exercises **content** drift (weaken an installed preset file → the
+  checker must flag it), not only version drift.
+
 ## [1.9.1] — 2026-10-12
 
 Adversarial security audit of the no-verify hook. The audit found — and this release fixes —

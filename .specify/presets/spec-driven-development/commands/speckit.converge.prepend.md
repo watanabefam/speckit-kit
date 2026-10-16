@@ -37,6 +37,20 @@ every item one of three outcomes:
 An item that gets none of these has been silently abandoned, which is the failure mode the parking
 lot exists to prevent. Report the count and what happened to each.
 
+### Close the progress ledger
+
+When the feature is complete, tombstone `specs/<NNN>-<slug>/progress.md` rather than leaving it
+looking active. Append a final block and stop writing to it:
+
+```
+# Status: complete — <YYYY-MM-DD>
+# Final: spec.md, plan.md, tasks.md, progress.md reconciled
+```
+
+A ledger that still looks active will be read as authoritative by a later session that should
+instead be starting fresh. Do not delete it — for committed specs, the ledger is audit trail. A
+ledger for a retired plan is archived, never merged into a new one.
+
 ### Handoff discipline
 
 Close with what changed, what remains open, what needs approval, what was verified and how, and

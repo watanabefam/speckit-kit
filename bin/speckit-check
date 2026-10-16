@@ -55,10 +55,17 @@ check_one() {
   else
     line "${R}DRIFT${X} preset version ${installed} → ${KIT_VERSION}"; drift=1
   fi
-  if diff -rq "$KIT_ROOT/preset" "$preset_dir" 2>/dev/null | grep -v "\.composed" >/dev/null; then
-    # ignore .composed/ — spec-kit generates it during install, so it always differs
+  # Compare content by CAPTURING the diff, not by testing a pipeline's exit code.
+  # `diff` exits 1 whenever files differ (normal), and under `set -o pipefail` that
+  # 1 propagates through `| grep`, so `if diff | grep; then` took the ELSE branch and
+  # reported "identical" exactly when content DIFFERED — the checker was inverted.
+  # It survived because the gate's functional test only exercised version drift.
+  # Ignore .composed/ (spec-kit generates it) and .DS_Store (macOS metadata).
+  local d
+  d="$(diff -rq "$KIT_ROOT/preset" "$preset_dir" 2>/dev/null | grep -vE '\.composed|\.DS_Store' || true)"
+  if [ -n "$d" ]; then
     local n
-    n="$(diff -rq "$KIT_ROOT/preset" "$preset_dir" 2>/dev/null | grep -vc "\.composed")"
+    n="$(printf '%s\n' "$d" | grep -c .)"
     line "${Y}DIFF${X}  preset content differs in $n file(s) — re-install applies the rest"
     drift=1
   else
