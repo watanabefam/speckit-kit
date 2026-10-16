@@ -7,6 +7,77 @@ The preset version lives in `preset/preset.yml` and is what `specify preset info
 
 ## [Unreleased]
 
+## [1.11.0] — 2026-10-16
+
+### Added — an independent review step and a stress test in `/speckit.converge`
+
+The kit verified *artifact consistency and declared boundaries*; it did not review the produced
+change. Every worst regression in this kit's history passed review and a keyword check and failed
+only under an adversarial run — the no-verify bypass class, the inverted drift checker, the eval
+runner that silently evaluated the wrong directory. That defect class had no step. Spec 002
+(`specs/002-review-and-stress-gate/`) adds it to converge.
+
+`commands/speckit.converge.prepend.md` gains two sections:
+
+- **Review by a context that did not do the work** — fresh context (ideally a different model);
+  findings carry evidence (`file:line` or a reproducing command) or are dismissed with a reason;
+  termination is by **unresolved severity (HIGH+), not by the reviewer going quiet**, capped at three
+  passes; prefer a deterministic check over a model's judgement.
+- **Stress the properties the change asserts** — triggered by *what the change asserts* (a hook,
+  gate, validator, guard, invariant), not its size; the **negative case goes first**; a failing case
+  becomes a **permanent regression fixture**.
+
+### Why bounded, and why severity-gated (not "until zero findings")
+
+The stop condition is the load-bearing design decision, and the research is unusually clear. The
+"self-critique paradox" (Snorkel 2025, via `research.md` [S2]) found that on work a generator already
+handles well, a self-critique loop *dropped* accuracy — the critic invents flaws to justify itself.
+Independently, LLM judges carry documented self-preference and position bias, so a reviewer sharing
+the author's context shares its blind spots ([S1][3][5]). "Zero findings" therefore converges either
+never or on a weak reviewer — worse than no reviewer. The rule stops on severity instead, and the
+kit's own `/speckit.specify` already caps its loop at three.
+
+### Deliberately not done
+
+- **No hook, no enforcement claim.** Review is judgement and cannot be mechanised; this is an
+  advisory command rule, stated as such.
+- **No new pipeline step.** Review folds into converge, which already owns close-out.
+- **No mandatory multi-pass loop** and no per-change eval — a one-line change and a security hook do
+  not warrant the same depth; the stress-test trigger scales by what the change asserts.
+
+`scripts/self-gate.sh` §3b asserts the converge command carries the rule and its bound, and §5
+asserts it reaches the materialised command. The `SKILL.md` "the command carries" row is updated.
+
+## [1.10.0] — 2026-10-16
+
+### Added — a research rule for `/speckit.plan`
+
+The plan step could already research (Phase 0 resolves `NEEDS CLARIFICATION` into `research.md`),
+but nothing said *what makes a source good* or *when research is worth doing*. The kit's principles
+(repository-first, evidence over claims, scope control) implied it; an implication is not a rule.
+
+`commands/speckit.plan.prepend.md` now carries a short research rule, written as **moves rather than
+a tier table**. The information-science literature is clear that a few concrete actions — go to the
+primary source, corroborate, trace, date — outperform a checklist of criteria; the library field
+reached the same conclusion when it superseded the CRAAP checklist with lateral reading
+(Sye & Statton Thompson 2023, `doi:10.33011/newlibs/13/9`; Kamela 2024, `doi:10.1002/tl.20608`;
+McGrew & Breakstone 2021, `doi:10.1186/s41235-021-00291-4`). So the rule
+is five moves, tool-agnostic, and deliberately bounded ("not to survey the topic") so it cannot
+license the unconditional full discovery the kit warns against.
+
+### Deliberately not done
+
+- **No named research tool.** The kit installs into arbitrary repos, so it must not couple to one
+  vendor's search product (e.g. a specific scholarly-search app). "Go to the primary source" is the
+  durable form; the tool is the installer's choice.
+- **No change to the research trigger.** Research still keys off `NEEDS CLARIFICATION` and a design
+  dependency, not a discretionary "research if useful" — loosening it would reopen the kit's most
+  expensive anti-pattern.
+
+`scripts/self-gate.sh` §3b now asserts the plan command carries the rule *and its bound* (`not to
+survey the topic`), and the end-to-end check asserts it reaches the materialised command — so a
+weakening into a rule that surveys anyway cannot pass silently.
+
 ## [1.9.2] — 2026-10-12
 
 The drift checker was inverted, and the preset version was stale. Both found by asking

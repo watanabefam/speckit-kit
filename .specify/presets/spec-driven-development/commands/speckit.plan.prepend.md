@@ -54,6 +54,25 @@ Never assume a new architecture is preferable to the existing one. Reconcile the
 what is there. If the code contradicts the spec, repair the spec first — do not design around
 a contradiction.
 
+### Research the unknowns — go to the primary source
+
+Research only to resolve a `NEEDS CLARIFICATION`, or to verify external behaviour the design leans
+on — not to survey the topic. A design that depends on how a library, API, or tool actually behaves
+must confirm it, not assume it; the wrong assumption surfaces at implementation, if at all.
+
+- **Go to the primary source.** Official documentation, the specification, the source code, or the
+  maintainer's own statement. A blog, tutorial, or Q&A may point you there; it is not the evidence.
+- **Corroborate, do not count.** Ten posts repeating one benchmark are one source. Prefer the single
+  primary source over many secondary ones.
+- **Trace the claim, and date it.** Follow it to its origin and record the version it applies to.
+  "X does Y" is unverified without a version for a fast-moving dependency.
+- **Never cite what you did not open.** Record the URL — or `file:line`, for a claim about this
+  codebase — for every finding. An uncited finding is a guess, not a finding.
+- **Record disagreement, do not average it.** When sources conflict, note the conflict and the
+  boundary between them; the boundary is often the real answer.
+
+Record findings in `research.md`; carry whatever remains open into the plan's Open Questions.
+
 ### Stop at the approval gate
 
 Present the plan and **stop**. Do not begin implementation from this step.

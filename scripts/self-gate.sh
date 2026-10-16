@@ -423,10 +423,10 @@ need(not bad, "every command entry uses strategy: prepend (never replace)")
 # so their presence in the command is the whole point of this preset.
 expected = {
     "commands/speckit.specify.prepend.md":   ["Section integrity", "resolve-template.sh", "Choose the workflow first", "Ask only what materially matters"],
-    "commands/speckit.plan.prepend.md":      ["Section integrity", "resolve-template.sh", "Sweep before you list", "Stop at the approval gate"],
+    "commands/speckit.plan.prepend.md":      ["Section integrity", "resolve-template.sh", "Sweep before you list", "go to the primary source", "not to survey the topic", "Never cite what you did not open", "Stop at the approval gate"],
     "commands/speckit.tasks.prepend.md":     ["Section integrity", "resolve-template.sh", "traces to a requirement", "Control scope"],
     "commands/speckit.implement.prepend.md": ["Evidence before", "Tick tasks honestly", "earliest"],
-    "commands/speckit.converge.prepend.md":  ["Completion requires evidence", "round up to green", "Handoff discipline"],
+    "commands/speckit.converge.prepend.md":  ["Completion requires evidence", "round up to green", "did not do the work", "Every finding carries evidence", "Stop when no UNRESOLVED", "Send the negative case first", "Handoff discipline"],
 }
 files = set(re.findall(r'(?m)^\s+file:\s*"(commands/[^"]+)"', raw))
 for f, markers in expected.items():
@@ -652,9 +652,13 @@ if [ "$E2E" = "1" ]; then
     }
     check_cmd specify   "Choose the workflow first"
     check_cmd plan      "Sweep before you list"
+    check_cmd plan      "not to survey the topic"
     check_cmd tasks     "traces to a requirement"
     check_cmd implement "Evidence before"
     check_cmd converge  "Completion requires evidence"
+    check_cmd converge  "Every finding carries evidence"
+    check_cmd converge  "Send the negative case first"
+    check_cmd converge  "Stop when no UNRESOLVED"
     # Reversibility: uninit must restore the repo to its pre-install state, and must
     # preserve the user's own AGENTS.md content. Asserted on a scratch repo with a
     # pre-existing AGENTS.md, because that is the case that can silently lose data.

@@ -3,7 +3,7 @@ schema_version: "1.0"
 preset:
   id: "spec-driven-development"
   name: "Spec-Driven Development Addenda"
-  version: "1.9.2"
+  version: "1.11.0"
   description: "Appends problem framing, traceability, approval boundaries and verification sections to the core spec, plan and task templates without replacing them."
   author: "watanabefam"
   repository: "https://github.com/watanabefam/speckit-kit"
@@ -33,7 +33,7 @@ provides:
     - type: "command"
       name: "speckit.plan"
       file: "commands/speckit.plan.prepend.md"
-      description: "Prepends a section-integrity instruction so appended template sections are not dropped from plan.md"
+      description: "Prepends a section-integrity instruction so appended template sections are not dropped from plan.md; also carries the repository sweep, repository-as-evidence, the bounded research rule, and the approval gate"
       strategy: "prepend"
 
     - type: "command"
@@ -55,7 +55,7 @@ provides:
     - type: "command"
       name: "speckit.converge"
       file: "commands/speckit.converge.prepend.md"
-      description: "Prepends the convergence rules: evidence-based completion, no rounding up to green, verify declared boundaries, handoff discipline"
+      description: "Prepends the convergence rules: evidence-based completion, no rounding up to green, verify declared boundaries, independent review by a non-author context, stress the asserted properties, handoff discipline"
       strategy: "prepend"
 
     - type: "template"
