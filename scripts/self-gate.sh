@@ -975,6 +975,34 @@ PY
   fi
 fi
 
+hdr "3d. section integrity — the conformance check for 3b"
+SIC="$ROOT/scripts/check-section-integrity.sh"
+if [ ! -f "$SIC" ]; then
+  bad "scripts/check-section-integrity.sh is missing — the section-integrity rule is prose-only again"
+else
+  SICD="$(mktemp -d)"
+  if bash "$ROOT/.specify/scripts/bash/resolve-template.sh" spec-template > "$SICD/ok.md" 2>/dev/null \
+     && [ -s "$SICD/ok.md" ]; then
+    # A conformant artifact is the resolved template itself: every required heading is present.
+    if bash "$SIC" "$ROOT" spec-template "$SICD/ok.md" >/dev/null 2>&1; then
+      ok "accepts a conformant artifact"
+    else
+      bad "rejected a conformant artifact (false positive)"
+    fi
+    # Drop one required heading. It MUST fail, or the check is vacuous — the whole point of
+    # adding it was that a real spec shipped with two sections missing and nothing noticed.
+    grep -v '^## Success Criteria' "$SICD/ok.md" > "$SICD/bad.md" || true
+    if bash "$SIC" "$ROOT" spec-template "$SICD/bad.md" >/dev/null 2>&1; then
+      bad "accepted an artifact with a required section missing — the check is vacuous"
+    else
+      ok "catches a missing required section"
+    fi
+  else
+    bad "could not resolve spec-template to build the conformance fixture"
+  fi
+  rm -rf "$SICD"
+fi
+
 printf '\n'
 if [ "$fail" = "0" ]; then echo "SELF-GATE: PASS"; else echo "SELF-GATE: FAIL"; fi
 exit "$fail"

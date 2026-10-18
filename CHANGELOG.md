@@ -7,6 +7,38 @@ The preset version lives in `preset/preset.yml` and is what `specify preset info
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [1.13.0] — 2026-10-18
+
+### Added — an amendment's reasoning now survives its own commit
+
+The core `/speckit.constitution` step requires a Sync Impact Report and then expects it removed
+before commit. So an amendment kept its **result** in the constitution and its **reasoning**
+nowhere — and a rule whose factual premise later goes stale could not be detected by anyone reading
+the result. A decision with no recorded rationale leaves a future reader accepting it blindly or
+changing it blindly, which is the documented reason architecture decision records exist.
+
+- **`preset/commands/speckit.constitution.prepend.md`** (new) — requires a durable, immutable,
+  supersedable decision record for every amendment: context, decision, status, consequences,
+  evidence and confidence, referenced from the constitution so the pointer does not depend on the
+  scratch report. Numbered and never renumbered; superseded, never edited in place.
+- `speckit.constitution` is now a contributed command. It carried no contribution at all before.
+
+### Added — a conformance check for a rule that was prose only
+
+"Every mode's final step carries its contract blocks" was machine-checked. "The artifact keeps every
+section the resolved template requires" was not — despite being equally machine-checkable, and
+despite a real run dropping two sections from a spec while the prose rule sat in the command
+unread.
+
+- **`scripts/check-section-integrity.sh`** (new) — compares a filled artifact's headings against
+  the resolved template's and reports missing and reordered sections. It compares **headings, not
+  content**: it cannot tell a well-filled section from a stub, nor whether
+  `Not applicable — <reason>` is honest. That limit is stated in the script rather than hidden.
+- **self-gate §3d** (new) — asserts the checker accepts a conformant artifact **and catches a
+  missing section**, so a later edit cannot silently make the check vacuous.
+
 ### Fixed — the self-gate could be red for reasons that were not defects
 
 CI had been red on every push since `fa4e345` (2026-10-16), on both runners, for causes that were
