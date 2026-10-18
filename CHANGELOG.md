@@ -7,6 +7,14 @@ The preset version lives in `preset/preset.yml` and is what `specify preset info
 
 ## [Unreleased]
 
+### Fixed — `speckit-check` no longer false-flags a merged `hooks.yaml`
+
+The hooks check compared the project's `hooks.yaml` with the kit's byte-for-byte (`cmp -s`), so any
+project that legitimately **merged** the kit's hooks with its own (e.g. `audit-project`, which already
+shipped a hooks file) read as drift forever — indistinguishable from a stale install. The check now
+requires every hook the kit ships to be **present by id**: a merged file passes, and a file missing
+one of the kit's hooks is still flagged.
+
 ## [1.12.0] — 2026-10-17
 
 ### Added — a mechanical autonomy boundary, one-command verification, continuous execution, and a fast lane

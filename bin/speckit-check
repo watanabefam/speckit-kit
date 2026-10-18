@@ -89,7 +89,19 @@ check_one() {
   elif cmp -s "$KIT_ROOT/hooks/speckit-hooks.yaml" "$hooks"; then
     line "${G}ok${X}    project hooks current"
   else
-    line "${Y}DIFF${X}  project hooks present but differ (possibly project-edited — check before overwriting)"; drift=1
+    # A project may legitimately MERGE the kit's hooks with its own (e.g. a repo that
+    # already had a hooks.yaml). Byte-equality then fails even though nothing is wrong.
+    # So require every hook the kit ships to be PRESENT, by id — a merged file passes.
+    local missing_hook=0 _hid
+    while IFS= read -r _hid; do
+      [ -z "$_hid" ] && continue
+      grep -qE "^[[:space:]]*-[[:space:]]*id:[[:space:]]*${_hid}([[:space:]]|$)" "$hooks" || missing_hook=1
+    done < <(grep -oE '^[[:space:]]*-[[:space:]]*id:[[:space:]]*[A-Za-z0-9_.-]+' "$KIT_ROOT/hooks/speckit-hooks.yaml" | sed 's/.*id:[[:space:]]*//')
+    if [ "$missing_hook" -eq 0 ]; then
+      line "${G}ok${X}    project hooks carry the kit's hooks (merged with project hooks)"
+    else
+      line "${Y}DIFF${X}  project hooks present but missing one or more kit hooks (possibly project-edited — check before overwriting)"; drift=1
+    fi
   fi
 
   # 4. AGENTS.md bridge ---------------------------------------------------------
