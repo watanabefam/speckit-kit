@@ -144,3 +144,8 @@ ignore red. Both fixed (T045). Reproduced locally before fixing: with `specify` 
 
 Evidence: `./scripts/self-gate.sh` → SELF-GATE: PASS (233 ok, 0 FAIL). T032 stays open until CI itself
 is green on both runners.
+
+**Update — CI is green.** After three fixes (T045 + the scoring-skip follow-up), `gh run view` shows
+`e2e-gate: success`, `static-gate (macos-latest): success`, `static-gate (ubuntu-latest): success` on
+`4121177`. CI had been red since `fa4e345` (2026-10-16). **T032 is now closed** — Linux bash 5 and
+macOS system bash 3.2 are both verified by CI, which is stronger evidence than a local run.

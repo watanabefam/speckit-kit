@@ -171,7 +171,7 @@ stops and promotes.
 - [x] T030 [P] Bump `preset/preset.yml` to `1.12.0` and add `## [1.12.0]` to `CHANGELOG.md`
 - [x] T031 [P] Update `README.md` component/command tables and layout (the count "prepend on 5
       commands" is now stale)
-- [ ] T032 Run the full self-gate e2e on macOS (bash 3.2) and Linux (bash 5) — FR-014, SC-005
+- [x] T032 Run the full self-gate e2e on macOS (bash 3.2) and Linux (bash 5) — FR-014, SC-005
 - [ ] T033 Run `quickstart.md` scenarios S1–S12 and record the evidence
 - [x] T034 Fill the Task column in `spec.md` Requirement Traceability; reconcile `plan.md` if the
       design shifted during implementation

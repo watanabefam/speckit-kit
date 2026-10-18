@@ -9,16 +9,20 @@ The preset version lives in `preset/preset.yml` and is what `specify preset info
 
 ### Fixed — the self-gate could be red for reasons that were not defects
 
-Two long-standing CI failures, neither caused by the change under test (they were red on `fa4e345`
-and earlier, days before):
+CI had been red on every push since `fa4e345` (2026-10-16), on both runners, for causes that were
+not defects under test. Three fixes, one root cause each:
 
-- **The runner-hang regression test depended on `speckit-init` being on `PATH`.** The eval runner
-  called it by bare name, which works on the author's machine and fails on any fresh clone — so
-  `evals/test-runner-hang.py` failed in CI while passing locally. It now resolves the kit's own
-  `bin/speckit-init` by path. (`scripts/self-gate.sh` §1b also captures the test's output instead of
-  discarding it — which is why the failure could not say *which* of its three properties broke.)
+- **The runner-hang test depended on tooling that CI does not install.** Its scoring half prepares a
+  real spec-kit repo, which needs the `specify` CLI; the eval runner also called `speckit-init` by
+  bare name, which resolves on the author's machine and not on a fresh clone. It now resolves the
+  kit's own `bin/speckit-init` by path, and **skips the scoring half** when `specify` is absent —
+  the hang properties (which need no CLI) still run everywhere.
 - **The drift-checker section ran in a job that does not install `specify`.** §1g now skips with a
   clear message when the CLI is absent, as §5 already did, instead of failing on a missing tool.
+- **§1b discarded the failing test's output**, so a CI failure could not say *which* of the test's
+  three properties broke. It now captures and prints it — which is what made the cause visible.
+
+Result: CI green on `ubuntu-latest` (bash 5), `macos-latest` (system bash 3.2), and the e2e job.
 
 ### Fixed — `speckit-check` no longer false-flags a merged `hooks.yaml`
 
