@@ -1,6 +1,8 @@
 # Autonomy contract
 
-End every response with these four sections. Omit a section only when it is empty.
+End every response with these four sections. Omit a section only when it is empty — and never fill
+an empty section with something that does not belong in it. News that is neither a decision nor an
+approval (an observation, a heads-up, a limitation you hit) goes in your prose, not in a bucket.
 
 ## Done
 
