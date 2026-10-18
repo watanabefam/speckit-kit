@@ -17,6 +17,7 @@ Detected for this project by `speckit-init`. Run `./scripts/verify` to run test 
 
 | Purpose | Command |
 | --- | --- |
+| install | `npm install` |
 | test | `npm test` |
 | lint | `npm run lint` |
 | typecheck | `npm run typecheck` |
@@ -24,6 +25,8 @@ Detected for this project by `speckit-init`. Run `./scripts/verify` to run test 
 | **verify** | `./scripts/verify` |
 <!-- SPECKIT-COMMANDS END -->
 ```
+
+`verify` runs **test → lint → typecheck → build** (install is recorded but not run — installing on every verify is slow and surprising).
 
 When the stack is not detectable, every row reads `unresolved` and the `verify` row is omitted:
 
@@ -69,15 +72,16 @@ must supply, rather than inventing a command.
 
 ## Detection signals (a checklist, not a default)
 
-| Ecosystem | File | Signal |
+| Ecosystem | Detected from | Commands recorded |
 | --- | --- | --- |
-| Node | `package.json` | `scripts.test` / `scripts.lint` / `scripts.build` / `scripts.typecheck` |
-| Python | `pyproject.toml`, `tox.ini`, `Makefile` | `pytest`, `ruff`, `mypy`, `uv run …` |
-| Rust | `Cargo.toml` | `cargo test` / `cargo clippy` |
-| Go | `go.mod` | `go test ./...` / `go vet ./...` |
-| Make | `Makefile` | `test` / `lint` targets |
+| Node | `package.json` scripts (lockfile picks the manager) | `install` (`npm ci` with a lockfile, else `npm install`); `test` / `lint` / `typecheck` / `build` for the scripts that exist |
+| Python | `pyproject.toml`, `pytest.ini`, `tox.ini` | `test`; `install` (`uv sync` if `uv.lock`, else `pip install -e .`); `lint` (`ruff`) and `typecheck` (`mypy`) **only when a config file proves the tool is intended** |
+| Rust | `Cargo.toml` | `cargo fetch` / `cargo test` / `cargo clippy` / `cargo check` |
+| Go | `go.mod` | `go mod download` / `go test ./...` / `go vet ./...` / `go build ./...` |
+| Make | `Makefile` with a `test:` target | `make test` |
 
-Detection never invents a command; an unmatched ecosystem falls to `unresolved` (FR-006).
+Detection never invents a command: a tool is claimed only when a config file proves it, and an
+unmatched ecosystem falls to `unresolved` (FR-006).
 
 ## Acceptance
 

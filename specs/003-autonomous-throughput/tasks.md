@@ -328,27 +328,27 @@ scope creep.
 Findings from `/speckit.converge` (independent review by a fresh context + the gate's negative
 tests). Each carries a reproduction. Ordered CRITICAL/HIGH first.
 
-- [ ] T037 Soften the [1.12.0] CHANGELOG claims to match reality: the permission block is **inert
+- [x] T037 Soften the [1.12.0] CHANGELOG claims to match reality: the permission block is **inert
       without the `opencode-yaml-hooks` plugin**, and `uninit` removes the boundary by a
       blank-line-tolerant comparison and `scripts/verify` by a heuristic, not by byte-identity per
       `contradicts` (F8)
-- [ ] T038 Normalise quotes before token comparison in **both** hook predicates (`block-commit-no-verify`
+- [x] T038 Normalise quotes before token comparison in **both** hook predicates (`block-commit-no-verify`
       and `block-force-push`): `git push '-f' origin main` and `git commit "--no-verify" -m x` are
       ALLOW today per `contradicts` (F1) — add both as permanent §1f regression fixtures
-- [ ] T039 Broaden the destructive deny globs with a leading wildcard so wrappers and infixes match:
+- [x] T039 Broaden the destructive deny globs with a leading wildcard so wrappers and infixes match:
       `npx supabase db push`, `pnpm -r publish`, `npx prisma migrate reset` resolve to ALLOW today
       per `partial` (F2)
-- [ ] T040 Replace `uninit`'s `scripts/verify` substring heuristic with a generated-shape check (every
+- [x] T040 Replace `uninit`'s `scripts/verify` substring heuristic with a generated-shape check (every
       non-blank line matches the generated grammar), so a user-customised verify is kept per
       `contradicts` (F3)
-- [ ] T041 Close the FR-005 gap: the detector sets no `install` command and no lint/typecheck for
+- [x] T041 Close the FR-005 gap: the detector sets no `install` command and no lint/typecheck for
       Python/Rust/Go, while `contracts/commands-block.md` lists `ruff`/`mypy`/`cargo check`/`go vet`
       signals per `partial` (F5) — implement, or narrow the contract to what is implemented
 - [ ] T042 Validate the permission block against a **live** opencode session (quickstart S4/S5): if
       opencode resolves rules first-match rather than last-match, the boundary is inert while the gate
       still passes per `partial` (F4, R1/R2); record the result and soften any claim until verified
-- [ ] T043 Tighten `uninit`'s command removal from the `speckit*.md` glob to the kit-owned names
+- [x] T043 Tighten `uninit`'s command removal from the `speckit*.md` glob to the kit-owned names
       (`speckit.md`, `speckit.*.md`), so a user file like `speckit-notes.md` is not deleted per
       `partial` (F6)
-- [ ] T044 Strengthen the gate: assert FR-015 drift reporting, and give the uninit fixture a
+- [x] T044 Strengthen the gate: assert FR-015 drift reporting, and give the uninit fixture a
       `package.json` so `scripts/verify` removal is actually exercised per `partial` (F7)

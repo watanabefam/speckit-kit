@@ -395,25 +395,44 @@ say "AGENTS.md routing block installed"
 # The single biggest variable cost is discovering how to test. Record the commands
 # once, expose one `verify` entry point, and name it in every task's Verification
 # line. Detection never guesses: an unmatched stack records `unresolved` (FR-006).
-CMD_TEST=""; CMD_LINT=""; CMD_TYPECHECK=""; CMD_BUILD=""
+CMD_INSTALL=""; CMD_TEST=""; CMD_LINT=""; CMD_TYPECHECK=""; CMD_BUILD=""
 if [[ -f "$ROOT/package.json" ]]; then
   PM="npm"
   [[ -f "$ROOT/pnpm-lock.yaml" ]] && PM="pnpm"
   [[ -f "$ROOT/yarn.lock" ]] && PM="yarn"
+  CMD_INSTALL="$PM install"
+  [[ "$PM" = "npm" && -f "$ROOT/package-lock.json" ]] && CMD_INSTALL="npm ci"
   grep -qE '"(test)"[[:space:]]*:'      "$ROOT/package.json" && CMD_TEST="$PM test"
   grep -qE '"(lint)"[[:space:]]*:'      "$ROOT/package.json" && CMD_LINT="$PM run lint"
   grep -qE '"(typecheck)"[[:space:]]*:' "$ROOT/package.json" && CMD_TYPECHECK="$PM run typecheck"
   grep -qE '"(build)"[[:space:]]*:'     "$ROOT/package.json" && CMD_BUILD="$PM run build"
 fi
-if [[ -z "$CMD_TEST" ]] && [[ -f "$ROOT/pyproject.toml" || -f "$ROOT/pytest.ini" || -f "$ROOT/tox.ini" ]]; then
-  CMD_TEST="python3 -m pytest"
+if [[ -f "$ROOT/pyproject.toml" || -f "$ROOT/pytest.ini" || -f "$ROOT/tox.ini" ]]; then
+  [[ -z "$CMD_TEST" ]] && CMD_TEST="python3 -m pytest"
+  if [[ -f "$ROOT/uv.lock" ]]; then
+    [[ -z "$CMD_INSTALL" ]] && CMD_INSTALL="uv sync"
+  elif [[ -f "$ROOT/pyproject.toml" ]]; then
+    [[ -z "$CMD_INSTALL" ]] && CMD_INSTALL="python3 -m pip install -e ."
+  fi
+  # Only claim a tool when a config file proves it is intended — never guess.
+  if [[ -f "$ROOT/ruff.toml" || -f "$ROOT/.ruff.toml" ]] || grep -q '\[tool\.ruff' "$ROOT/pyproject.toml" 2>/dev/null; then
+    [[ -z "$CMD_LINT" ]] && CMD_LINT="python3 -m ruff check ."
+  fi
+  if [[ -f "$ROOT/mypy.ini" || -f "$ROOT/.mypy.ini" ]] || grep -q '\[tool\.mypy' "$ROOT/pyproject.toml" 2>/dev/null; then
+    [[ -z "$CMD_TYPECHECK" ]] && CMD_TYPECHECK="python3 -m mypy ."
+  fi
 fi
 if [[ -f "$ROOT/Cargo.toml" ]]; then
+  [[ -z "$CMD_INSTALL" ]] && CMD_INSTALL="cargo fetch"
   [[ -z "$CMD_TEST" ]] && CMD_TEST="cargo test"
   [[ -z "$CMD_LINT" ]] && CMD_LINT="cargo clippy"
+  [[ -z "$CMD_TYPECHECK" ]] && CMD_TYPECHECK="cargo check"
 fi
-if [[ -f "$ROOT/go.mod" ]] && [[ -z "$CMD_TEST" ]]; then
-  CMD_TEST="go test ./..."
+if [[ -f "$ROOT/go.mod" ]]; then
+  [[ -z "$CMD_INSTALL" ]] && CMD_INSTALL="go mod download"
+  [[ -z "$CMD_TEST" ]] && CMD_TEST="go test ./..."
+  [[ -z "$CMD_LINT" ]] && CMD_LINT="go vet ./..."
+  [[ -z "$CMD_TYPECHECK" ]] && CMD_TYPECHECK="go build ./..."
 fi
 if [[ -f "$ROOT/Makefile" ]] && [[ -z "$CMD_TEST" ]] && grep -qE '^test:' "$ROOT/Makefile"; then
   CMD_TEST="make test"
@@ -424,6 +443,7 @@ CMDS_FILE="$(mktemp)"
   printf '## Commands\n\n'
   printf 'Detected for this project by `speckit-init`. Run `./scripts/verify` for test → lint → typecheck.\n\n'
   printf '| Purpose | Command |\n| --- | --- |\n'
+  cmd_row install "$CMD_INSTALL"
   cmd_row test "$CMD_TEST"
   cmd_row lint "$CMD_LINT"
   cmd_row typecheck "$CMD_TYPECHECK"

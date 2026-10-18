@@ -65,6 +65,7 @@ Detected for this project by `speckit-init`. Run `./scripts/verify` for test →
 
 | Purpose | Command |
 | --- | --- |
+| install | unresolved — set by hand, or re-run `speckit-init` after adding a manifest |
 | test | `make test` |
 | lint | unresolved — set by hand, or re-run `speckit-init` after adding a manifest |
 | typecheck | unresolved — set by hand, or re-run `speckit-init` after adding a manifest |

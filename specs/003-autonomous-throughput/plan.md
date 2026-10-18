@@ -459,6 +459,10 @@ loaded. Under the `lean` preset, which bypasses templates, it does not apply.
   so the kit's own Commands block is meaningful. `specify preset add/update` **normalises**
   `opencode.json` (strips blank lines), so the kit source was made blank-line-free and uninit's
   comparison was made formatting-tolerant. P-005's check method was reconciled to `review-only`.
+- **Changed during convergence (Phase 8):** a **fourth hook** (`block-destructive-commands`) and
+  quote-stripping in the hook predicates close the review's bypass findings; the detector gained
+  `install` and Python/Rust/Go lint+typecheck; `uninit` gained a shape check for `scripts/verify` and
+  a narrower command glob. T042 (live validation of rule precedence) remains open.
 - **Still open:** whether project config overrides global `permission` (R1) and whether `permission`
   is honoured (R2) — both are validation steps, not design blockers; Linux bash 5 (CI).
 - **Needs approval:** this plan, before `/speckit.tasks`.

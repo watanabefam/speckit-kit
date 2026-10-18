@@ -19,18 +19,22 @@ prompt spends a finite instruction budget. This release acts on that.
 
 - **A permission boundary, installed by `bin/speckit-init` (§2d).** A `permission` block is written
   to the project `opencode.json` — created if absent, **printed and never written** if the project
-  already has one. It denies force-push (any flag position), `--no-verify` and `core.hooksPath`
-  overrides, package publish, and destructive database commands; it gates push/reset/clean with
-  `ask`. Order is load-bearing: opencode evaluates in order and the **last match wins**, so the
-  catch-all is first and the specific denies are last.
+  already has one. It denies `--force` force-push, `--no-verify` and `core.hooksPath` overrides,
+  package publish, and destructive database commands; it gates push/reset/clean with `ask`. Order is
+  load-bearing: opencode's documented behaviour is to evaluate rules in order and take the **last**
+  match, so the catch-all is first and the specific denies are last. **The boundary depends on that
+  documented behaviour** — the gate only *simulates* it, and a live check remains open (task T042).
+  The forms a glob cannot express (short flags, wrappers) are covered by the hooks, which **require
+  the `opencode-yaml-hooks` plugin** and are inert without it.
 - **An autonomy contract, one file (§2e).** `global/autonomy-contract.md` installs to
   `.opencode/autonomy-contract.md` and defines the four-bucket handoff (Done · Continuing · Decision
   needed · Approval required). The routing block points at it with **one line** — no `/speckit.*`
   command carries the prose, because the instruction budget is finite.
 - **A `## Commands` block and a `scripts/verify` entry point (§6b).** `speckit-init` detects the
   stack (Node, Python, Rust, Go, Make), records install/test/lint/typecheck/build in a managed
-  `AGENTS.md` block, and generates one `verify` entry point. Detection never guesses: an unmatched
-  stack records `unresolved` and generates nothing.
+  `AGENTS.md` block, and generates one `verify` entry point. Detection never guesses: a tool is
+  claimed only when a config file proves it, and an unmatched stack records `unresolved` and
+  generates nothing.
 - **Continuous execution with a budget.** `preset/commands/speckit.implement.prepend.md` gains an
   "execute continuously, with a stopping condition" rule: run the whole approved `tasks.md` without
   a per-phase confirmation, and halt only on the execution budget (3 consecutive failures), an
@@ -39,12 +43,16 @@ prompt spends a finite instruction budget. This release acts on that.
   failing test first for a defect, smallest change, `verify`, one `specs/quick-log.md` entry — and
   **promote to `/speckit.specify` if it grows**. It is installer-copied, because a preset cannot
   create a new command (a `type: "command"` entry naming one is silently ignored).
-- **A third hook, `block-force-push`.** A glob cannot express `git push -f` without false-positiving
-  on the benign `--follow-tags`, so the short-flag force-push is token-based, like the no-verify
-  hook. It blocks `-f`, `--force` / `--force-*`, and the `+<refspec>` prefix, and `self-gate.sh` §1f
-  exercises that exact predicate against six force forms and four benign ones.
-- **`bin/speckit-uninit` reverses all of it** — and only removes what is still byte-identical to
-  what the kit installed.
+- **Two more hooks.** `block-force-push` (short-flag force-push, which a glob cannot express without
+  false-positiving on `--follow-tags`) and `block-destructive-commands` (`publish`, `supabase db
+  push|reset`, `prisma migrate reset|deploy` — including `npx`/wrapper and `-r` forms). Both are
+  token-based and **strip quote characters first**, so a quoted flag cannot evade the walk. They are
+  segment-guarded, so a command that merely *mentions* the words (`grep -r npm publish .`) is
+  allowed. `self-gate.sh` §1f exercises each predicate against its force/irreversible forms and its
+  benign ones.
+- **`bin/speckit-uninit` reverses all of it** — and only removes what is still ours: the boundary by
+  a blank-line-tolerant comparison (because `specify preset add` normalises `opencode.json`), and
+  `scripts/verify` by a generated-shape check, so a customised file is kept.
 
 ### Why the boundary is mechanical, not more prose
 

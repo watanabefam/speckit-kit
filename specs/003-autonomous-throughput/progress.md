@@ -77,3 +77,26 @@ environment matches coarse substrings and blocked a diagnostic command containin
 Parking lot reviewed: all six items kept parked, each with a revisit condition (worktree/parallel →
 after Phase 8; eval gate → with a second measurement; sandbox docs → on demand; rule-file signing → if
 AGENTS.md becomes remotely sourced; cost budget → with eval instrumentation).
+
+## Phase 8 (2026-10-18)
+
+T037–T041, T043, T044 complete. T042 left open (needs a live opencode session).
+
+- T038: both existing hook predicates now strip quote characters (`tr -d '\42\47'`) before the walk.
+  Fixtures added; §1f now blocks 6 no-verify forms and 8 force forms, quoted included.
+- T039: a fourth hook, `block-destructive-commands` (publish / supabase db / prisma migrate), with a
+  segment guard so `grep -r npm publish .` is allowed. §1f: 8 irreversible forms blocked, 6 benign allowed.
+- T040: `uninit` removes `scripts/verify` only when it matches the generated shape.
+- T043: `uninit` removes `speckit.md` + `speckit.*.md`, not a `speckit*.md` glob.
+- T044: the gate asserts FR-015 drift reporting, and the uninit fixture now has a manifest so
+  `scripts/verify` removal is exercised.
+- T041: the detector records `install` and adds Python/Rust/Go lint+typecheck (only when a config file
+  proves the tool). The contract was updated to match.
+- T037: the CHANGELOG no longer claims more than the code does (plugin dependency, precedence
+  dependency, and the real uninit comparison are now stated).
+
+Ruling: the FR-015 gate assertion first failed because piping the installer into `grep -q` SIGPIPEs
+  the producer and `set -o pipefail` reads it as "not found" — the exact trap the installer documents
+  at its §4. Fixed by capturing to a variable first. The gate caught it, not a reading.
+
+Evidence: `./scripts/self-gate.sh` → SELF-GATE: PASS (232 ok, 0 FAIL); `./bin/speckit-check` → current.

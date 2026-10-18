@@ -170,8 +170,8 @@ hdr "1f. hooks — the only layer that can actually enforce"
 HK="$ROOT/hooks/speckit-hooks.yaml"
 if [ -f "$HK" ]; then
   ok "hooks/speckit-hooks.yaml present"
-  # The two hooks, and the property that makes them enforcement rather than advice.
-  for needle in "block-commit-no-verify" "protect-generated-files" "block-force-push" "action: stop" "exit 2"; do
+  # The four hooks, and the property that makes them enforcement rather than advice.
+  for needle in "block-commit-no-verify" "protect-generated-files" "block-force-push" "block-destructive-commands" "action: stop" "exit 2"; do
     if grep -q "$needle" "$HK"; then ok "hook file carries: $needle"; else bad "hook file missing: $needle"; fi
   done
   # The no-verify guard must BEHAVE, not just exist. A keyword check passes a hook
@@ -194,17 +194,19 @@ PY
   if [ -z "$AWK" ]; then
     bad "could not extract the no-verify awk predicate from the hook — gate cannot test it"
   else
-    hk_verdict() { printf '%s' "$1" | awk "$AWK" | grep -q . && echo BLOCK || echo ALLOW; }
+    # Mirror the hook: it strips quotes before the walk, so a quoted flag cannot evade.
+    hk_verdict() { printf '%s' "$1" | tr -d '\42\47' | awk "$AWK" | grep -q . && echo BLOCK || echo ALLOW; }
     hk_fail=0
     for c in "git commit --no-verify -m x" "git commit -n -m x" \
              "git -c core.hooksPath=/dev/null commit -m x" \
-             "git --no-pager --git-dir=.git --work-tree=. commit -n -m x"; do
+             "git --no-pager --git-dir=.git --work-tree=. commit -n -m x" \
+             "git commit \"--no-verify\" -m x" "git commit '--no-verify' -m x"; do
       [ "$(hk_verdict "$c")" = "BLOCK" ] || { bad "no-verify guard ALLOWS bypass: $c"; hk_fail=1; }
     done
     for c in "git log -n 5" "git commit -m x" "grep -n foo f"; do
       [ "$(hk_verdict "$c")" = "ALLOW" ] || { bad "no-verify guard BLOCKS benign: $c"; hk_fail=1; }
     done
-    [ "$hk_fail" = "0" ] && ok "no-verify predicate blocks 4 bypass forms, allows 3 benign (behavioral, not keywords)"
+    [ "$hk_fail" = "0" ] && ok "no-verify predicate blocks 6 bypass forms (incl. quoted), allows 3 benign (behavioral, not keywords)"
   fi
   # Hook 3 (force-push) must also BEHAVE. A `-f` glob would false-positive on
   # `--follow-tags`, so this predicate is the only thing covering `git push -f`;
@@ -220,17 +222,43 @@ PY
   if [ -z "$AWK3" ]; then
     bad "could not extract the force-push awk predicate — gate cannot test it"
   else
-    fp_verdict() { printf '%s' "$1" | awk "$AWK3" | grep -q . && echo BLOCK || echo ALLOW; }
+    fp_verdict() { printf '%s' "$1" | tr -d '\42\47' | awk "$AWK3" | grep -q . && echo BLOCK || echo ALLOW; }
     fp_fail=0
     for c in "git push --force origin main" "git push origin main --force" \
              "git push -f origin main" "git push -f" "git -C repo push -f origin main" \
-             "git push origin +main"; do
+             "git push origin +main" "git push '-f' origin main" "git push \"-f\" origin main"; do
       [ "$(fp_verdict "$c")" = "BLOCK" ] || { bad "force-push guard ALLOWS: $c"; fp_fail=1; }
     done
     for c in "git push origin main" "git push --follow-tags" "git push --tags" "git status"; do
       [ "$(fp_verdict "$c")" = "ALLOW" ] || { bad "force-push guard BLOCKS benign: $c"; fp_fail=1; }
     done
-    [ "$fp_fail" = "0" ] && ok "force-push predicate blocks 6 force forms, allows 4 benign (behavioral, not keywords)"
+    [ "$fp_fail" = "0" ] && ok "force-push predicate blocks 8 force forms (incl. quoted), allows 4 benign"
+  fi
+  # Hook 4 (publish / destructive DB) must BEHAVE, and must not fire on a command
+  # that merely MENTIONS the words (segment guard: the CLI must start the segment).
+  AWK4="$(python3 - "$HK" <<'PY'
+import re, sys
+raw = open(sys.argv[1]).read()
+for m in re.finditer(r"awk '\n(.*?)\n            '\s*<<<", raw, re.S):
+    if "saw_pm" in m.group(1):
+        print(m.group(1)); break
+PY
+)"
+  if [ -z "$AWK4" ]; then
+    bad "could not extract the destructive-command awk predicate — gate cannot test it"
+  else
+    dc_verdict() { printf '%s' "$1" | tr -d '\42\47' | awk "$AWK4" | grep -q . && echo BLOCK || echo ALLOW; }
+    dc_fail=0
+    for c in "npm publish" "pnpm -r publish" "cargo publish" "npx supabase db push" \
+             "supabase db reset" "npx prisma migrate reset" "prisma migrate deploy" \
+             "cd app && npm publish"; do
+      [ "$(dc_verdict "$c")" = "BLOCK" ] || { bad "destructive guard ALLOWS: $c"; dc_fail=1; }
+    done
+    for c in "npm test" "npm run build" "npm run publish-docs" "grep -r npm publish ." \
+             "git status" "supabase status"; do
+      [ "$(dc_verdict "$c")" = "ALLOW" ] || { bad "destructive guard BLOCKS benign: $c"; dc_fail=1; }
+    done
+    [ "$dc_fail" = "0" ] && ok "destructive predicate blocks 8 irreversible forms, allows 6 benign (segment-guarded)"
   fi
   # It must not protect the files that are MEANT to be edited.
   if grep -q ".specify/memory/constitution.md" "$HK" && grep -q "ALLOW" "$HK"; then
@@ -793,6 +821,7 @@ if [ "$E2E" = "1" ]; then
       U="$(mktemp -d)"
       git init -q "$U"
       printf '# scratch\n' > "$U/README.md"
+      printf '{"name":"u","scripts":{"test":"node -e 0"}}\n' > "$U/package.json"
       printf '# My own notes\n\nKeep me.\n' > "$U/AGENTS.md"
       ( cd "$U" && git add -A && git -c user.email=e@e -c user.name=e commit -qm init )
       "$ROOT/bin/speckit-init" "$U" >/dev/null 2>&1 || true
@@ -800,6 +829,7 @@ if [ "$E2E" = "1" ]; then
       if [ -d "$U/.specify" ]; then bad "uninit left .specify/ behind"; else ok "uninit removed .specify/"; fi
       if [ -f "$U/opencode.json" ]; then bad "uninit left the permission boundary behind"; else ok "uninit removed the permission boundary"; fi
       if [ -f "$U/.opencode/autonomy-contract.md" ]; then bad "uninit left the autonomy contract"; else ok "uninit removed the autonomy contract"; fi
+      if [ -f "$U/scripts/verify" ]; then bad "uninit left scripts/verify"; else ok "uninit removed scripts/verify"; fi
       if [ -f "$U/AGENTS.md" ] && grep -q "Keep me." "$U/AGENTS.md"; then
         ok "uninit preserved the user's own AGENTS.md content"
       else
@@ -827,6 +857,28 @@ if [ "$E2E" = "1" ]; then
       bad "installer modified an existing opencode.json"
     fi
     rm -rf "$N"
+    # FR-015: a managed block edited since install is reported on the next install.
+    D="$(mktemp -d)"
+    git init -q "$D"
+    printf '# x\n' > "$D/README.md"
+    printf '{"name":"d","scripts":{"test":"node -e 0"}}\n' > "$D/package.json"
+    ( cd "$D" && git add -A && git -c user.email=e@e -c user.name=e commit -qm init )
+    "$ROOT/bin/speckit-init" "$D" >/dev/null 2>&1 || true
+    python3 - "$D/AGENTS.md" <<'PY'
+import sys
+p = sys.argv[1]; s = open(p).read()
+open(p, "w").write(s.replace("## Commands", "## Commands (edited)", 1))
+PY
+    # Capture first: piping the installer straight into `grep -q` lets grep exit on
+    # the match and SIGPIPE the producer, which under `set -o pipefail` reads as
+    # "not found". (The installer documents this same trap at its §4.)
+    D_OUT="$("$ROOT/bin/speckit-init" "$D" 2>&1 || true)"
+    if printf '%s' "$D_OUT" | grep -q "differs from the installed copy"; then
+      ok "installer reports drift in a managed block (FR-015)"
+    else
+      bad "installer did not report managed-block drift (FR-015)"
+    fi
+    rm -rf "$D"
     for m in "SPECKIT-BRIDGE START" "SPECKIT-BRIDGE END" "SPECKIT-COMMANDS START" "SPECKIT-COMMANDS END" "<!-- SPECKIT START -->" "<!-- SPECKIT END -->"; do
       c=$(grep -c "$m" AGENTS.md 2>/dev/null || true)
       if [ "$c" = "1" ]; then ok "marker once: $m"; else bad "marker $m appears $c times"; fi

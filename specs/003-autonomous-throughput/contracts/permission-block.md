@@ -54,18 +54,30 @@ block is printed and the file is left untouched.
 - **Editable.** The block is ordinary project config; a user may change it, and the change is visible
   in the diff.
 
-## Known limitation — glob matching and flag position
+## Known limitation — globs cannot express flags or wrappers
 
-opencode patterns are simple globs on the command string. The initial pattern `git push --force*`
-matched `git push --force origin main` but **not** `git push origin main --force` (trailing flag).
+opencode patterns are simple globs on the command string. Two things a glob cannot express, and how
+each is covered:
 
-**Resolved, in two parts.** The glob `git push*--force*` covers the long flag in any position
-(`git push --force origin main`, `git push origin main --force`), and `self-gate.sh` §1d3 asserts
-this. The short flag (`git push -f …`) **cannot** be covered by a glob without false-positiving on
-the benign `--follow-tags`, so it is handled by a **token-based hook** — `block-force-push`, hook 3
-in `hooks/speckit-hooks.yaml`, modelled on `block-commit-no-verify`. It walks the git tokens and
-blocks `-f`, `--force` / `--force-*`, and the `+<refspec>` prefix. `self-gate.sh` §1f exercises that
-exact predicate against six force forms and four benign ones.
+- **Flag position and quoting.** `git push --force*` misses `git push origin main --force`, and a
+  `-f` glob false-positives on the benign `--follow-tags`. The glob `git push*--force*` covers the
+  long flag in any position; the **token-based hook `block-force-push`** covers `-f`, `--force-*`,
+  and `+<refspec>`. The hook **strips quote characters first**, so `git push '-f' …` cannot evade it.
+- **Wrappers and infixes.** `supabase db push*` misses `npx supabase db push`, and `pnpm publish*`
+  misses `pnpm -r publish`. The **token-based hook `block-destructive-commands`** covers `publish`
+  (npm/pnpm/yarn/cargo), `supabase db push|reset`, and `prisma migrate reset|deploy`, including
+  `npx`/`dlx` and `-r` forms. It is **segment-guarded** — the CLI must start a command segment — so a
+  command that merely mentions the words (`grep -r npm publish .`) is allowed.
+
+`self-gate.sh` §1d3 asserts the glob coverage, and §1f exercises each hook predicate against its
+force/irreversible forms *and* its benign ones, including the quoted forms that first defeated it.
+
+## Residual risk — rule precedence is documented, not verified here
+
+The block's correctness depends on opencode evaluating rules in order and taking the **last** match
+(its documented behaviour). The gate only *simulates* that fold; a live session is required to confirm
+it, and until then a first-match implementation would leave the boundary inert. This is task **T042**
+and risk **R1/R2**, and the CHANGELOG states the dependency rather than claiming enforcement.
 
 ## Non-goals
 
