@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+# speckit-mcp — register CiteKit's MCP server with opencode, IF CiteKit is present.
+#
+# WHY THIS EXISTS
+# The evidence-search discipline's whole point is that an answer resting on outside sources is
+# checkable. CiteKit ships an MCP server over its nine-source scholarly pipeline, so an agent that
+# has it registered reaches the literature by tool name, with no browser and no account. Without
+# registration the agent falls back to shell API calls — which works, but is the path of most
+# resistance, and an agent that never notices the server will describe CiteKit as needing a browser.
+# Making the good path the default path is the point.
+#
+# WHY IT DETECTS INSTEAD OF DEPENDING
+# speckit-kit is a general spec-driven-development kit. CiteKit is one specific tool. A hard
+# dependency would break every install that does not have it, so this DETECTS and SKIPS: no CiteKit,
+# no noise, no failure. Same shape as the self-gate's "skip with a clear message when the CLI is
+# absent".
+#
+# WHY IT USES THE CLI INSTEAD OF WRITING JSON
+# opencode's MCP config schema changed between versions (`mcp.<name>` in v1, `mcp.servers.<name>` in
+# v2, `enabled` vs `disabled`). Hand-writing JSON would pin this script to one version and corrupt
+# the other. `opencode mcp add` knows the schema it is running under, so this asks it.
+#
+# KEYS
+# Five of CiteKit's nine sources need no key, so registration is useful unkeyed. When a key is
+# wanted, it belongs in the server's `environment` block — NEVER as a command argument, because
+# process arguments are readable by every user on the machine (CiteKit's own README makes this
+# point). This script never asks for, reads or prints a key.
+#
+# Usage: speckit-mcp [repo-path]
+# Exit: always 0 unless invoked with bad arguments. "Could not register" is not an installation
+#       failure — it is a skip with a reason, and failing an install over an optional integration
+#       would be worse than the missing integration.
+set -uo pipefail
+
+say()  { printf '  %s\n' "$*"; }
+note() { printf '        %s\n' "$*"; }
+
+for arg in "$@"; do
+  case "$arg" in
+    --help|-h) sed -n '2,26p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+  esac
+done
+
+# --- 1. detect CiteKit ---------------------------------------------------------
+CANDIDATES="${CITEKIT_HOME:-} $HOME/Documents/GitHub/citekit $HOME/citekit $HOME/src/citekit $HOME/code/citekit"
+MJS=""
+for c in $CANDIDATES; do
+  [ -n "$c" ] || continue
+  if [ -f "$c/tools/mcp-server.mjs" ]; then MJS="$c/tools/mcp-server.mjs"; break; fi
+done
+
+if [ -z "$MJS" ]; then
+  say "skip  CiteKit not found — nothing to register (set CITEKIT_HOME to its repo to enable this)"
+  exit 0
+fi
+
+# --- 2. prerequisites ---------------------------------------------------------
+if ! command -v node >/dev/null 2>&1; then
+  say "skip  CiteKit found at $MJS but node is not on PATH (the MCP server needs Node 18+)"
+  exit 0
+fi
+if ! command -v opencode >/dev/null 2>&1; then
+  say "skip  CiteKit found but the opencode CLI is absent"
+  note "its MCP config shape differs between opencode versions, so writing the JSON blind"
+  note "would be worse than not registering. Register later with:"
+  note "  opencode mcp add citekit -- node $MJS"
+  exit 0
+fi
+
+# --- 3. idempotent: already registered? --------------------------------------
+if opencode mcp list </dev/null 2>/dev/null | grep -q 'citekit'; then
+  say "ok    citekit MCP server already registered"
+  exit 0
+fi
+
+# --- 4. register -------------------------------------------------------------
+if opencode mcp add citekit -- node "$MJS" </dev/null >/dev/null 2>&1; then
+  say "ok    registered the citekit MCP server -> $MJS"
+  note "unkeyed it still reaches five of nine sources. To raise the OpenAlex budget, add"
+  note "CITEKIT_OPENALEX_KEY to the server's environment block — not to a command line,"
+  note "where every user on the machine could read it."
+else
+  say "warn  could not register automatically — opencode mcp add exited non-zero"
+  note "register by hand:  opencode mcp add citekit -- node $MJS"
+fi
+exit 0

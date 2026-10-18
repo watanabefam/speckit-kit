@@ -1003,6 +1003,35 @@ else
   rm -rf "$SICD"
 fi
 
+hdr "1h. CiteKit MCP registration is optional, and skips cleanly"
+MCPBIN="$ROOT/bin/speckit-mcp"
+if [ ! -f "$MCPBIN" ]; then
+  bad "bin/speckit-mcp is missing"
+else
+  if bash -n "$MCPBIN"; then ok "bin/speckit-mcp parses"; else bad "bin/speckit-mcp has a syntax error"; fi
+  # THE CONTRACT THAT MATTERS: with no CiteKit present this must SKIP and still exit 0. An
+  # optional integration that can fail an install is worse than the integration it adds.
+  _noKit="$(mktemp -d)"
+  _out="$(HOME="$_noKit" bash "$MCPBIN" 2>&1)"; _rc=$?
+  if [ "$_rc" = "0" ] && printf '%s' "$_out" | grep -q 'skip'; then
+    ok "skips cleanly when CiteKit is absent, and exits 0"
+  else
+    bad "did not skip cleanly without CiteKit (exit $_rc) — this could break an install"
+  fi
+  rm -rf "$_noKit"
+  # And the installer must still wire it, or the script is dead code.
+  if grep -q 'speckit-mcp' "$ROOT/bin/speckit-init"; then
+    ok "speckit-init invokes the registration script"
+  else
+    bad "speckit-init does not invoke bin/speckit-mcp — it is dead code"
+  fi
+  if grep -q -- '--no-mcp' "$ROOT/bin/speckit-init"; then
+    ok "speckit-init offers --no-mcp (opting out is possible)"
+  else
+    bad "speckit-init has no --no-mcp opt-out"
+  fi
+fi
+
 printf '\n'
 if [ "$fail" = "0" ]; then echo "SELF-GATE: PASS"; else echo "SELF-GATE: FAIL"; fi
 exit "$fail"

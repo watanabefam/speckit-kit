@@ -7,6 +7,30 @@ The preset version lives in `preset/preset.yml` and is what `specify preset info
 
 ## [Unreleased]
 
+### Added — CiteKit's MCP server is registered on install, if CiteKit is present
+
+The evidence-search discipline's point is that an answer resting on outside sources is checkable.
+CiteKit ships an MCP server over its nine-source scholarly pipeline, but nothing registered it, so
+agents fell back to shell API calls — and one agent, never noticing the server, reported that
+CiteKit "needs a browser, so an agent cannot use it". Making the good path the default path is the
+fix.
+
+- **`bin/speckit-mcp`** (new) — detects CiteKit, then registers its MCP server via
+  `opencode mcp add`. An **optional integration, deliberately not a dependency**: the kit is
+  general-purpose and CiteKit is one specific tool, so a hard dependency would break every install
+  that lacks it. No CiteKit → skip with a reason, exit 0. An optional integration must never fail
+  an install.
+- It asks the **CLI** rather than writing JSON, because opencode's MCP schema changed between
+  versions (`mcp.<name>` in v1, `mcp.servers.<name>` in v2; `enabled` vs `disabled`) — hand-written
+  JSON would pin one version and corrupt the other.
+- It never asks for, reads or prints a key: five of CiteKit's nine sources need none, and a key
+  belongs in the server's `environment` block, never in a command argument, where every user on the
+  machine can read it.
+- **`bin/speckit-init`** — runs it after the AGENTS.md block, with `--no-mcp` to opt out.
+- **self-gate §1h** (new) — asserts the script parses, that it **skips cleanly with no CiteKit
+  present while still exiting 0**, and that `speckit-init` still wires it. The skip path is the
+  contract that matters: this must not be able to fail someone's install.
+
 Nothing yet.
 
 ## [1.13.0] — 2026-10-18

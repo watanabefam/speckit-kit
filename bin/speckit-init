@@ -9,6 +9,7 @@
 # Options:
 #   --with-bug            also install the bundled `bug` extension
 #   --with-assess         also install the bundled `assess` extension
+#   --no-mcp              do not register CiteKit's MCP server (default: detect it and register)
 #
 # What it does:
 #   1. Ensures the `specify` CLI is installed
@@ -34,11 +35,13 @@ usage() { sed -n '2,23p' "$0" | sed 's/^# \{0,1\}//'; }
 
 WITH_BUG=false
 WITH_ASSESS=false
+NO_MCP=false
 TARGET=""
 for arg in "$@"; do
   case "$arg" in
     --with-bug)          WITH_BUG=true ;;
     --with-assess)       WITH_ASSESS=true ;;
+    --no-mcp)            NO_MCP=true ;;
     --help|-h)           usage; exit 0 ;;
     -*)                  echo "error: unknown option '$arg'" >&2; exit 1 ;;
     *)                   TARGET="$arg" ;;
@@ -485,6 +488,17 @@ bash .specify/extensions/agent-context/scripts/bash/update-agent-context.sh >/de
 # --- Done ---------------------------------------------------------------------
 cmds=$(ls -1 .opencode/commands/*.md 2>/dev/null | wc -l | tr -d ' ')
 presets=$(ls -1 .specify/presets 2>/dev/null | wc -l | tr -d ' ')
+# --- 6. CiteKit MCP server (optional; detect and skip) -------------------------
+# An OPTIONAL integration, deliberately not a dependency: the kit is general-purpose, CiteKit is
+# one specific tool, and a hard dependency would break installs that lack it. The script detects,
+# registers when it can, and skips with a reason when it cannot. `--no-mcp` opts out.
+if [ "$NO_MCP" = "false" ]; then
+  SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  if [ -f "$SELF_DIR/speckit-mcp" ]; then
+    bash "$SELF_DIR/speckit-mcp" "$ROOT" || true
+  fi
+fi
+
 say "done — $cmds commands, $presets preset(s) in $ROOT"
 cat <<EOF
 
