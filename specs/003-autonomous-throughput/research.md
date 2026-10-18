@@ -111,6 +111,45 @@ per-command prompts are already 1.7k–3.0k words.
 "Approval required" bucket names the exact command, target, impact, and rollback — the design avoids
 adding gates and instead makes the few that remain load-bearing.
 
+## Finding 7 — rule-evaluation semantics: read the source, and don't depend on it (T042)
+
+T042 asked whether the permission block actually blocks in a live session, because it assumes
+opencode takes the **last** matching rule. The question is answerable from the source, and the
+dependency is removable.
+
+- **What opencode does today.** The docs say rules are matched "with the last matching rule winning"
+  [32], and the implementation agrees: `evaluate()` flattens the rulesets and calls `rules.findLast(…)`
+  [33]; the project's own tests assert "later rules take precedence (last match wins)" [36]. The
+  **installed binary (1.18.30)** shows the same `findLast` fold in the current permission code, so this
+  is what is running, not merely documented.
+- **What is about to change.** An open issue reports that `findLast` lets a broad deny silently
+  override a more specific allow [34], and an open PR replaces it with **most-specific-pattern-wins**
+  (specificity = literal characters before the first wildcard; ties broken by position, later wins)
+  [35]. So "last match wins" is true today and may be false after an upgrade.
+- **The field is contested, not just this tool.** Claude Code documents the opposite — evaluated
+  **deny → ask → allow**, *first* match wins, specificity does not change the order [37][39] — while a
+  filed issue reports observed behaviour that contradicts it, with specificity winning across scopes
+  [38]. **The general lesson: for this class of tool the documentation is not the specification.**
+- **The hazard has a name.** Access-control research calls it **shadowing** (a rule that can never take
+  effect because another subsumes it), with verified detection algorithms [40][41]; firewall research
+  exists to optimise rule order and remove shadowing and redundancy [42][43]; **deny-overrides** and
+  deny-monotone composition are the safe combining semantics [44].
+- **opencode's wildcard match is anchored to the whole string** (`*`→`.*`, `?`→`.`, `^…$`) [33], so
+  `npm publish*` does **not** match `cd app && npm publish`. The glob layer is genuinely partial — which
+  is why the token hooks carry the wrapper forms.
+
+**Resolution.** The dependency was removed rather than verified once. The gate (§1d3) now resolves the
+ruleset under **both** folds and requires the same verdict for every irreversible action and for a
+command derived from every deny pattern, plus the structural property that makes last-match safe
+(every deny is later than every non-deny). This was confirmed before it was asserted: all 11
+irreversible actions and all derived commands resolve to `deny` under **both** semantics, with no
+shadowing. T042 is therefore closed deterministically — a live session is no longer the gate, and a
+future change to the semantics fails the gate instead of silently disarming the boundary.
+
+**Design consequence:** deny rules are last *and* at least as specific as the rules they override, so
+both semantics agree. Prefer the layer whose semantics the kit owns (a hook) for anything a glob
+cannot express.
+
 ## What the evidence does not support
 
 - **"More autonomy always means faster."** The 2025 result was a slowdown; the 2026 result is too
@@ -229,3 +268,16 @@ fork in `plan.md`.
 [29] HumanLayer. *12-Factor Agents* (factors 7–8). https://github.com/humanlayer/12-factor-agents
 [30] OWASP. *LLM06:2025 Excessive Agency.* https://genai.owasp.org/llmrisk/llm062025-excessive-agency/
 [31] Pant (2026). *Spec-Driven Development, Without the Hype.* https://utsabpant.com/blog/spec-driven-development-without-the-hype
+[32] OpenCode. *Permissions* ("last matching rule winning"). https://opencode.ai/docs/permissions/
+[33] OpenCode source walkthrough: *Permission* (`evaluate()` uses `findLast`; Wildcard is anchored). https://www.opencode.asia/source-code/permission/
+[34] opencode issue #37935 — *permission: broad deny overrides specific allow via findLast() semantics.* https://github.com/anomalyco/opencode/issues/37935
+[35] opencode PR #37936 — *fix(opencode): use most-specific-pattern-wins instead of last-match-wins.* https://github.com/anomalyco/opencode/pull/37936
+[36] opencode — *packages/opencode/test/permission-task.test.ts.* https://github.com/anomalyco/opencode/blob/02b7eb59/packages/opencode/test/permission-task.test.ts
+[37] Anthropic. *Claude Code — Configure permissions* (deny → ask → allow; first match wins). https://code.claude.com/docs/en/permissions
+[38] anthropics/claude-code issue #25345 — *Permission rule evaluation docs don't match observed behavior.* https://github.com/anthropics/claude-code/issues/25345
+[39] Anthropic. *Claude Code — Agent SDK: Configure permissions.* https://code.claude.com/docs/en/agent-sdk/permissions
+[40] (2016). *A verified algorithm for detecting conflicts in XACML access control rules.* doi:10.1145/2854065.2854079
+[41] (2011). *Anomaly discovery and resolution in web access control policies.* doi:10.1145/1998441.1998472
+[42] (2023). *An innovative two-stage algorithm to optimize Firewall rule ordering.* doi:10.1016/j.cose.2023.103423
+[43] (2011). *Network-Level Access Control Policy Analysis and Transformation.* doi:10.1109/tnet.2011.2178431
+[44] (2025). *Deny-monotone composition of hierarchical access control policies in distributed systems.* doi:10.21203/rs.3.rs-8290081/v1

@@ -29,9 +29,9 @@ prompt spends a finite instruction budget. This release acts on that.
   to the project `opencode.json` — created if absent, **printed and never written** if the project
   already has one. It denies `--force` force-push, `--no-verify` and `core.hooksPath` overrides,
   package publish, and destructive database commands; it gates push/reset/clean with `ask`. Order is
-  load-bearing: opencode's documented behaviour is to evaluate rules in order and take the **last**
-  match, so the catch-all is first and the specific denies are last. **The boundary depends on that
-  documented behaviour** — the gate only *simulates* it, and a live check remains open (task T042).
+  load-bearing: opencode resolves with `findLast()` today (last match wins) but an open PR changes it
+  to most-specific-wins, so the rules are written so **both** agree — every deny is last *and* at
+  least as specific as what it overrides. The gate asserts that under both folds (task T042, closed).
   The forms a glob cannot express (short flags, wrappers) are covered by the hooks, which **require
   the `opencode-yaml-hooks` plugin** and are inert without it.
 - **An autonomy contract, one file (§2e).** `global/autonomy-contract.md` installs to

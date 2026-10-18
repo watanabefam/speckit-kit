@@ -100,3 +100,26 @@ Ruling: the FR-015 gate assertion first failed because piping the installer into
   at its §4. Fixed by capturing to a variable first. The gate caught it, not a reading.
 
 Evidence: `./scripts/self-gate.sh` → SELF-GATE: PASS (232 ok, 0 FAIL); `./bin/speckit-check` → current.
+
+## T042 (2026-10-18) — closed deterministically, no live session
+
+Researched online and on CiteKit (see `research.md` Finding 7, sources [32]–[44]). The premise that
+only a live session could settle it was false:
+
+- opencode resolves with `rules.findLast(...)` — confirmed in the docs [32], a source walkthrough [33],
+  the project's own tests [36], and the **installed 1.18.30 binary**.
+- An open PR changes it to most-specific-wins (ties by position) [35], so the dependency had an expiry
+  date rather than being unknown.
+- The hazard is named in the literature — shadowing/conflict in access-control rules [40][41], rule
+  ordering in firewalls [42][43], deny-overrides as the safe combining semantics [44].
+
+Ruling: remove the dependency rather than verify it once. The rules are written so both semantics
+agree (every deny is last AND at least as specific as what it overrides), and the gate now asserts it
+under **both** folds, plus the structural property that no deny precedes a non-deny. Verified before
+asserting: all 11 irreversible actions and a command derived from every deny pattern resolve to `deny`
+under both.
+
+Evidence: `./scripts/self-gate.sh` → §1d3 "11 irreversible actions deny under last-match AND
+most-specific" + "every deny is later than every non-deny"; full gate PASS.
+
+Remaining open in this spec: T021/T032/T033 (behavioural halves needing a live session; Linux bash 5).

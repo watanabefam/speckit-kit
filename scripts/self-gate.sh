@@ -133,37 +133,74 @@ else
   ok "no command prepend duplicates the autonomy contract"
 fi
 
-hdr "1d3. property P-003 — every irreversible action resolves to deny"
-# opencode evaluates the rules in order and the LAST match wins, so the resolution is
-# a fold, not a first-match. The list includes the trailing-flag force-push that a
-# naive glob misses (R5).
+hdr "1d3. property P-003 — irreversible actions deny under BOTH rule semantics"
+# opencode resolves with findLast() today (last match wins), but an open PR changes it to
+# most-specific-wins (specificity = literal chars before the first wildcard; ties -> later).
+# The boundary must not depend on which ships, so resolve the ruleset under BOTH and require
+# the same verdict, and require the structural property that makes last-match safe.
+# Evidence and sources: specs/003-autonomous-throughput/research.md.
 python3 - "$PERM_SRC" <<'PY' || fail=1
-import json, re, sys, fnmatch
+import json, re, sys
 p = sys.argv[1]
 raw = open(p, encoding="utf-8").read()
 raw = re.sub(r'(?m)^\s*//.*$', '', raw)      # strip full-line // comments only
 raw = re.sub(r',(\s*[}\]])', r'\1', raw)     # strip trailing commas
-rules = list(json.loads(raw).get("permission", {}).get("bash", {}).items())
-def resolves(cmd):
+rules = list(json.loads(raw)["permission"]["bash"].items())
+
+def oc_match(s, pat):
+    # opencode Wildcard.match: * -> .*, ? -> ., anchored to the WHOLE string.
+    esc = re.sub(r'([.+^${}()|\[\]\\])', r'\\\1', pat)
+    esc = esc.replace('*', '.*').replace('?', '.')
+    return re.fullmatch(esc, s, re.S) is not None
+
+def spec(pat):
+    i = len(pat)
+    for w in ('*', '?'):
+        j = pat.find(w)
+        if j != -1:
+            i = min(i, j)
+    return i
+
+def last_match(c):
     out = None
     for pat, act in rules:
-        if fnmatch.fnmatch(cmd, pat):
+        if oc_match(c, pat):
             out = act
     return out
+
+def most_specific(c):
+    best = None
+    for idx, (pat, act) in enumerate(rules):
+        if oc_match(c, pat):
+            cand = (spec(pat), idx, act)
+            if best is None or cand[:2] >= best[:2]:
+                best = cand
+    return best[2] if best else None
+
 irreversible = [
-    "git push --force origin main",
-    "git push origin main --force",
-    "git commit --no-verify -m x",
-    "git -c core.hooksPath=/dev/null commit -m x",
+    "git push --force origin main", "git push origin main --force",
+    "git commit --no-verify -m x", "git -c core.hooksPath=/dev/null commit -m x",
     "npm publish", "pnpm publish", "yarn publish", "cargo publish",
     "supabase db push", "supabase db reset", "prisma migrate reset --force",
 ]
-# NOTE: `git push -f` is not here — a glob cannot express it without false-positiving
-# on `--follow-tags`. It is covered by the token-based hook 3 and tested in §1f.
-bad = [c for c in irreversible if resolves(c) != "deny"]
+# Every deny pattern is exercised at least once by a derived command, so a new deny
+# cannot be added without being tested.
+derived = [pat.replace("*", " x") for pat, act in rules if act == "deny"]
+# `git push -f` is deliberately absent: a glob cannot express it without false-positiving
+# on `--follow-tags`. The token hook 3 carries it, tested behaviourally in §1f.
+bad = [c for c in irreversible + derived
+       if last_match(c) != "deny" or most_specific(c) != "deny"]
 if bad:
-    print("  FAIL  not denied: " + "; ".join(bad)); sys.exit(1)
-print("  ok    all %d irreversible actions resolve to deny" % len(irreversible))
+    print("  FAIL  not denied under both semantics: " + "; ".join(sorted(set(bad)))); sys.exit(1)
+print("  ok    %d irreversible actions deny under last-match AND most-specific" % len(irreversible))
+
+# Structural guarantee for last-match: every deny must come AFTER every non-deny, so a
+# non-deny that matches the same command can never be the last match.
+last_non = max((i for i, (_, a) in enumerate(rules) if a != "deny"), default=-1)
+first_deny = min((i for i, (_, a) in enumerate(rules) if a == "deny"), default=len(rules))
+if first_deny <= last_non:
+    print("  FAIL  a deny rule precedes a non-deny rule — last-match-wins could be overridden"); sys.exit(1)
+print("  ok    every deny is later than every non-deny (last-match cannot be overridden)")
 PY
 
 hdr "1f. hooks — the only layer that can actually enforce"

@@ -344,7 +344,7 @@ tests). Each carries a reproduction. Ordered CRITICAL/HIGH first.
 - [x] T041 Close the FR-005 gap: the detector sets no `install` command and no lint/typecheck for
       Python/Rust/Go, while `contracts/commands-block.md` lists `ruff`/`mypy`/`cargo check`/`go vet`
       signals per `partial` (F5) — implement, or narrow the contract to what is implemented
-- [ ] T042 Validate the permission block against a **live** opencode session (quickstart S4/S5): if
+- [x] T042 Validate the permission block against a **live** opencode session (quickstart S4/S5): if
       opencode resolves rules first-match rather than last-match, the boundary is inert while the gate
       still passes per `partial` (F4, R1/R2); record the result and soften any claim until verified
 - [x] T043 Tighten `uninit`'s command removal from the `speckit*.md` glob to the kit-owned names

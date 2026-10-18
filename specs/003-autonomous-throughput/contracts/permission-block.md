@@ -72,12 +72,17 @@ each is covered:
 `self-gate.sh` §1d3 asserts the glob coverage, and §1f exercises each hook predicate against its
 force/irreversible forms *and* its benign ones, including the quoted forms that first defeated it.
 
-## Residual risk — rule precedence is documented, not verified here
+## Rule semantics — asserted under both, not assumed (T042 resolved)
 
-The block's correctness depends on opencode evaluating rules in order and taking the **last** match
-(its documented behaviour). The gate only *simulates* that fold; a live session is required to confirm
-it, and until then a first-match implementation would leave the boundary inert. This is task **T042**
-and risk **R1/R2**, and the CHANGELOG states the dependency rather than claiming enforcement.
+opencode resolves rules with `findLast()` today (last match wins), but an open PR changes it to
+most-specific-wins (specificity = literal characters before the first wildcard; ties by position).
+See `research.md` Finding 7 for the sources. The block is written so **both** semantics agree: every
+deny is both *last* and *at least as specific as* the rules it overrides.
+
+`self-gate.sh` §1d3 asserts this deterministically — it resolves every irreversible action, and a
+command derived from every deny pattern, under both folds and requires `deny` from each, plus the
+structural property that no deny precedes a non-deny. A future change to the semantics therefore
+fails the gate instead of silently disarming the boundary. No live session is required.
 
 ## Non-goals
 
