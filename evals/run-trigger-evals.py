@@ -47,6 +47,10 @@ import time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+# Resolve the kit's own installer by path, not by PATH. Relying on `speckit-init` being
+# on PATH works for the author's machine and fails in CI (and for any fresh clone) —
+# which is how the runner-hang regression test stayed red in CI while passing locally.
+SPECKIT_INIT = HERE.parent / "bin" / "speckit-init"
 EVALS = HERE / "trigger-evals.json"
 SKILL = "spec-driven-development"
 ANSI = re.compile(r"\x1b\[[0-9;]*m")
@@ -145,7 +149,8 @@ def make_spec_kit_repo() -> str:
         ["git", "-c", "user.email=e@e", "-c", "user.name=e", "commit", "-qm", "init"],
         cwd=d, check=True,
     )
-    r = subprocess.run(["speckit-init", d], capture_output=True, text=True)
+    init = str(SPECKIT_INIT) if SPECKIT_INIT.exists() else "speckit-init"
+    r = subprocess.run([init, d], capture_output=True, text=True)
     if r.returncode != 0 or not Path(d, ".specify").is_dir():
         sys.exit(f"could not prepare a spec-kit repo via speckit-init:\n{r.stdout}\n{r.stderr}")
     return d

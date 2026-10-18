@@ -7,6 +7,19 @@ The preset version lives in `preset/preset.yml` and is what `specify preset info
 
 ## [Unreleased]
 
+### Fixed — the self-gate could be red for reasons that were not defects
+
+Two long-standing CI failures, neither caused by the change under test (they were red on `fa4e345`
+and earlier, days before):
+
+- **The runner-hang regression test depended on `speckit-init` being on `PATH`.** The eval runner
+  called it by bare name, which works on the author's machine and fails on any fresh clone — so
+  `evals/test-runner-hang.py` failed in CI while passing locally. It now resolves the kit's own
+  `bin/speckit-init` by path. (`scripts/self-gate.sh` §1b also captures the test's output instead of
+  discarding it — which is why the failure could not say *which* of its three properties broke.)
+- **The drift-checker section ran in a job that does not install `specify`.** §1g now skips with a
+  clear message when the CLI is absent, as §5 already did, instead of failing on a missing tool.
+
 ### Fixed — `speckit-check` no longer false-flags a merged `hooks.yaml`
 
 The hooks check compared the project's `hooks.yaml` with the kit's byte-for-byte (`cmp -s`), so any

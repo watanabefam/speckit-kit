@@ -352,3 +352,6 @@ tests). Each carries a reproduction. Ordered CRITICAL/HIGH first.
       `partial` (F6)
 - [x] T044 Strengthen the gate: assert FR-015 drift reporting, and give the uninit fixture a
       `package.json` so `scripts/verify` removal is actually exercised per `partial` (F7)
+- [x] T045 Fix the two **pre-existing** CI failures found while validating T032 (neither caused by
+      this feature): the runner-hang test resolved `speckit-init` from `PATH` (absent in CI), and the
+      drift-checker section ran in a job that does not install `specify` per `contradicts` (F9)

@@ -35,10 +35,14 @@ else
 fi
 
 hdr "1b. runner hang regression"
-if python3 "$ROOT/evals/test-runner-hang.py" >/dev/null 2>&1; then
+# Capture the output: the test asserts three separate properties, and discarding it means
+# a CI failure cannot say WHICH one broke — which is how it stayed undiagnosed.
+HANG_OUT="$(python3 "$ROOT/evals/test-runner-hang.py" 2>&1)" && HANG_RC=0 || HANG_RC=$?
+if [ "$HANG_RC" = "0" ]; then
   ok "eval runner respects its timeout and leaves no orphans"
 else
   bad "eval runner hang regression — run: python3 evals/test-runner-hang.py"
+  printf '%s\n' "$HANG_OUT" | sed 's/^/        /' | tail -20
 fi
 
 hdr "1b2. eval runners isolate the working directory"
@@ -345,6 +349,12 @@ if [ -x "$CK" ]; then
   else
     bad "speckit-check does not check:$missing"
   fi
+  # The functional checks need the `specify` CLI (they install into a scratch repo).
+  # The STATIC gate job deliberately does not install it, so without this guard the
+  # section failed on a missing tool rather than on a defect. §5 already skips the same way.
+  if ! command -v specify >/dev/null 2>&1; then
+    printf '  skip  specify CLI not on PATH — the functional drift checks need it\n'
+  else
   # Functional: a deliberately-stale repo must be flagged, a current one must not.
   # (Previously this checked the kit's own repo, which was kept stale on purpose;
   # the user has since approved updating it, so the fixture is stale by construction.)
@@ -399,6 +409,7 @@ PY
     bad "speckit-check exited $rc on a non-kit project (want 2)"
   fi
   rm -rf "$TMPD"
+  fi
 else
   bad "bin/speckit-check missing — no way to tell whether an existing repo needs the update"
 fi

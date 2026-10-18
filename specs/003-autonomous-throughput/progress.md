@@ -123,3 +123,24 @@ Evidence: `./scripts/self-gate.sh` → §1d3 "11 irreversible actions deny under
 most-specific" + "every deny is later than every non-deny"; full gate PASS.
 
 Remaining open in this spec: T021/T032/T033 (behavioural halves needing a live session; Linux bash 5).
+
+## T032 (2026-10-18) — CI was red for pre-existing reasons; fixed
+
+Validating T032 against CI (`gh run list`) showed the gate has been **red since at least `fa4e345`
+(2026-10-16)** — i.e. before this feature — on both runners, for two causes that were not defects
+under test:
+
+- **§1b runner-hang:** `evals/run-trigger-evals.py` called `speckit-init` by bare name, which resolves
+  on the author's machine (`~/.local/bin/speckit-init`) and not on a fresh clone. Fixed by resolving
+  the kit's own `bin/speckit-init` by path. §1b now also captures the test output, which is what made
+  the cause visible.
+- **§1g drift checker:** it ran in the `static-gate` job, which deliberately does not install
+  `specify`, so it failed on a missing tool. It now skips, as §5 already did.
+
+Ruling: a gate that is red for environmental reasons is worse than no gate — it trains the reader to
+ignore red. Both fixed (T045). Reproduced locally before fixing: with `specify` on PATH and
+`speckit-init` absent, `evals/test-runner-hang.py` now passes where it previously raised
+`FileNotFoundError: 'speckit-init'`.
+
+Evidence: `./scripts/self-gate.sh` → SELF-GATE: PASS (233 ok, 0 FAIL). T032 stays open until CI itself
+is green on both runners.
