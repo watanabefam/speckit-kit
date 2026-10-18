@@ -82,6 +82,13 @@ def test_scoring() -> None:
     This drives main() end-to-end against a fake `opencode` with a scripted marker
     pattern, so the arithmetic is checked, not just the syntax.
     """
+    # The scoring half prepares a real spec-kit repo, which needs the `specify` CLI. The
+    # hang properties do not — so skip this half where the CLI is absent (the static-gate
+    # CI job deliberately does not install it) rather than failing the whole test on a
+    # tool the hang check never needed. That conflation is why it read red on every push.
+    if shutil.which("specify") is None:
+        print("  skip  per-query scoring needs the specify CLI (not on PATH)")
+        return
     import json
     import tempfile as tf
 
