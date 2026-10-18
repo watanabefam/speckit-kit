@@ -36,7 +36,7 @@ skill that fires about 60% of the time.
 | `/speckit.specify` | workflow selection, product reasoning, ask only what matters, record assumptions instead of inventing requirements |
 | `/speckit.plan` | inspect before proposing, the sweep for re-enumerated sets, the repository is evidence, research the unknowns from primary sources (bounded), stop at the approval gate |
 | `/speckit.tasks` | every task traces to a requirement, one verifiable outcome, scope control |
-| `/speckit.implement` | approved work only, evidence before "done", tick tasks honestly, repair the earliest artifact on contradiction |
+| `/speckit.implement` | approved work only, continuous execution with an execution budget, evidence before "done", tick tasks honestly, repair the earliest artifact on contradiction |
 | `/speckit.converge` | evidence-based completion, no rounding up to green, verify declared boundaries, independent review by a non-author context, stress the asserted properties, handoff discipline |
 
 Read the command you are about to run. **If this skill and a command ever disagree, the command
@@ -54,6 +54,10 @@ does not fit in a short command contribution. It deliberately does **not** resta
 One step at a time; let the user review before continuing. Optional gates when the change
 warrants them: `clarify` (before `plan`), `checklist` (after `plan`), `analyze` (after `tasks`,
 before `implement`).
+
+For work below the process's useful size, the fast lane `/speckit.quick` skips the artifacts
+entirely (failing test → smallest change → verify → one log entry) and promotes to `/speckit.specify`
+if it grows.
 
 ## Cross-cutting rules
 

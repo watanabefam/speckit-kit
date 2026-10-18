@@ -69,6 +69,7 @@ If any line is missing, report it and stop. Do **not** hand-edit anything under 
 | --- | --- |
 | `/speckit.constitution` | Once, first. Writes the project's delivery principles. |
 | `/speckit` | Every time after that. Describe what you want; it chooses the workflow and routes. |
+| `/speckit.quick` | A small, well-understood fix — no spec/plan/tasks, one log entry. Promotes itself if the change grows. |
 
 The rest of the loop (`/speckit.specify`, `/speckit.plan`, `/speckit.tasks`, `/speckit.implement`)
 is reached *through* `/speckit`. You rarely need to invoke them directly.

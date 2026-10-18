@@ -25,6 +25,8 @@ set -euo pipefail
 
 BRIDGE_START="<!-- SPECKIT-BRIDGE START -->"
 BRIDGE_END="<!-- SPECKIT-BRIDGE END -->"
+CMDS_START="<!-- SPECKIT-COMMANDS START -->"
+CMDS_END="<!-- SPECKIT-COMMANDS END -->"
 PRESET_ID="spec-driven-development"
 SPECKIT_PKG="specify-cli"
 
@@ -55,6 +57,43 @@ PRESET_DIR="$KIT_ROOT/preset"
 say()  { printf '\033[1;36m::\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m!!\033[0m %s\n' "$*" >&2; }
 die()  { printf '\033[1;31mxx\033[0m %s\n' "$*" >&2; exit 1; }
+
+# Replace the region between two markers in a file with the block in $4.
+# Creates the file if absent; appends the block if the markers are absent; replaces
+# the interior if they are present. Idempotent — the markers are never duplicated.
+# If the on-disk interior differs from the new body it says so (drift: edited since
+# install, or updated by the kit), then rewrites it.
+write_managed_block() {
+  python3 - "$1" "$2" "$3" "$4" "${5:-managed block}" <<'PY'
+import os, sys
+path, start, end, body_file, label = sys.argv[1:6]
+body = open(body_file, encoding="utf-8").read().rstrip("\n")
+old = open(path, encoding="utf-8").read() if os.path.exists(path) else ""
+new_block = start + "\n" + body + "\n" + end + "\n"
+if start in old and end in old:
+    pre = old.split(start)[0]
+    post = old.split(end, 1)[1]
+    current = old.split(start, 1)[1].split(end, 1)[0]
+    if current.strip("\n") != body.strip("\n"):
+        sys.stderr.write("   note: %s differs from the installed copy "
+                         "(edited since install, or updated by the kit)\n" % label)
+    out = pre + new_block + post.lstrip("\n")
+    if old.endswith("\n") and not out.endswith("\n"):
+        out += "\n"
+else:
+    out = (old.rstrip("\n") + "\n\n" if old.strip() else "") + new_block
+open(path, "w", encoding="utf-8").write(out)
+PY
+}
+
+# One markdown row for the Commands block. Empty command -> "unresolved".
+cmd_row() {
+  if [ -n "$2" ]; then
+    printf '| %s | `%s` |\n' "$1" "$2"
+  else
+    printf '| %s | unresolved — set by hand, or re-run `speckit-init` after adding a manifest |\n' "$1"
+  fi
+}
 
 # --- 1. CLI -------------------------------------------------------------------
 if ! command -v specify >/dev/null 2>&1; then
@@ -104,6 +143,21 @@ else
   die "entry-point source missing at $ENTRY_SRC"
 fi
 
+# The fast lane is likewise a command a preset cannot create, so it is copied too.
+# Missing source is a warning, not an error: an older kit checkout should still install.
+QUICK="$ROOT/.opencode/commands/speckit.quick.md"
+QUICK_SRC="$KIT_ROOT/commands/speckit.quick.md"
+if [[ -f "$QUICK_SRC" ]]; then
+  if [[ -f "$QUICK" ]] && cmp -s "$QUICK_SRC" "$QUICK"; then
+    say "/speckit.quick fast lane already current"
+  else
+    cp "$QUICK_SRC" "$QUICK"
+    say "installed /speckit.quick fast lane"
+  fi
+else
+  warn "commands/speckit.quick.md not found in the kit — fast lane not installed"
+fi
+
 # --- 2c. Hooks: the one layer that can actually enforce ------------------------
 # Everything else in this kit is prompt text — the model can deviate. These two
 # hooks run below that layer and cannot be talked out of it:
@@ -137,6 +191,50 @@ if [[ -f "$HOOK_SRC" ]]; then
     warn "  activate with:  opencode plugin $HOOK_PLUGIN   (or add it to the \"plugin\" array)"
     warn "  until then they do nothing — which is safe, but is not enforcement."
   fi
+fi
+
+# --- 2d. Permission boundary: the mechanical layer -----------------------------
+# A rule that must not be violable needs a permission or a hook, not a command. The
+# two hooks cover --no-verify and generated-file edits; this block covers the
+# irreversible shell actions no prompt reliably stops (force-push, publish,
+# destructive database commands). It lives in the PROJECT config so it is reviewable
+# and version-controllable with the project.
+#
+# opencode evaluates the rules in order and the LAST match wins, so the catch-all is
+# first and the specific denies are last. An existing opencode.json is never
+# clobbered: the block is printed with a merge instruction instead.
+PERM_SRC="$KIT_ROOT/permissions/opencode-permission.jsonc"
+OC_JSON="$ROOT/opencode.json"
+OC_JSONC="$ROOT/opencode.jsonc"
+if [[ -f "$PERM_SRC" ]]; then
+  if [[ -f "$OC_JSON" || -f "$OC_JSONC" ]]; then
+    EXISTING="$OC_JSON"; [[ -f "$EXISTING" ]] || EXISTING="$OC_JSONC"
+    warn "existing $(basename "$EXISTING") left untouched (it is not ours)."
+    warn "  to adopt the kit's permission boundary, merge the \"permission\" key from:"
+    warn "    $PERM_SRC"
+  else
+    cp "$PERM_SRC" "$OC_JSON"
+    say "installed opencode.json permission boundary (deny force-push / publish / destructive DB)"
+  fi
+else
+  warn "permission block source missing at $PERM_SRC — no boundary installed"
+fi
+
+# --- 2e. Autonomy contract -----------------------------------------------------
+# One file, not prose repeated in every command: the instruction budget is finite.
+# The routing block points at it with a single line (FR-004).
+CONTRACT_SRC="$KIT_ROOT/global/autonomy-contract.md"
+CONTRACT_DST="$ROOT/.opencode/autonomy-contract.md"
+if [[ -f "$CONTRACT_SRC" ]]; then
+  mkdir -p "$ROOT/.opencode"
+  if [[ -f "$CONTRACT_DST" ]] && cmp -s "$CONTRACT_SRC" "$CONTRACT_DST"; then
+    say "autonomy contract already current"
+  else
+    cp "$CONTRACT_SRC" "$CONTRACT_DST"
+    say "installed autonomy contract (.opencode/autonomy-contract.md)"
+  fi
+else
+  warn "autonomy contract source missing at $CONTRACT_SRC"
 fi
 
 # --- 3. Preset (template addenda + command contributions) ---------------------
@@ -243,6 +341,10 @@ It carries the workflow, approval gates, traceability and verification rules.
 **The skill loads on roughly 60% of relevant requests — `/speckit` is the reliable path.** Invoke
 it when you need the workflow to apply for certain.
 
+**End every response with the four-bucket handoff** — Done (with evidence) · Continuing · Decision
+needed · Approval required — defined in `.opencode/autonomy-contract.md`. Reversible, in-scope work
+is autonomous; only the irreversible, external, or costly needs approval.
+
 ## Two rules that are enforced, not advised
 
 `.opencode/hook/hooks.yaml` (requires the `opencode-yaml-hooks` plugin) runs below the prompt layer,
@@ -263,6 +365,7 @@ reading the command prompt directly and following it as instructions:
 | Step | File |
 | --- | --- |
 | entry point | `.opencode/commands/speckit.md` |
+| fast lane (small work) | `.opencode/commands/speckit.quick.md` |
 | constitution | `.opencode/commands/speckit.constitution.md` |
 | specify | `.opencode/commands/speckit.specify.md` |
 | plan | `.opencode/commands/speckit.plan.md` |
@@ -282,23 +385,79 @@ if [[ -f "$AGENTS" ]] && ! grep -qF "$BRIDGE_START" "$AGENTS" && [[ -s "$AGENTS"
   say "backed up existing AGENTS.md -> AGENTS.md.pre-speckit.bak (diff it, then delete or gitignore)"
 fi
 
-python3 - "$AGENTS" "$BRIDGE_START" "$BRIDGE_END" <<PY
-import sys
-path, start, end = sys.argv[1], sys.argv[2], sys.argv[3]
-body = """${BRIDGE}"""
-old = open(path).read() if __import__('os').path.exists(path) else ""
-new_block = start + "\n" + body + "\n" + end + "\n"
-if start in old and end in old:
-    pre = old.split(start)[0]
-    post = old.split(end, 1)[1]
-    out = pre + new_block + post.lstrip("\n")
-    if old.endswith("\n") and not out.endswith("\n"):
-        out += "\n"
-else:
-    out = (old.rstrip("\n") + "\n\n" if old.strip() else "") + new_block
-open(path, "w").write(out)
-PY
+BRIDGE_FILE="$(mktemp)"
+printf '%s' "$BRIDGE" > "$BRIDGE_FILE"
+write_managed_block "$AGENTS" "$BRIDGE_START" "$BRIDGE_END" "$BRIDGE_FILE" "routing block"
+rm -f "$BRIDGE_FILE"
 say "AGENTS.md routing block installed"
+
+# --- 6b. Commands block + scripts/verify ---------------------------------------
+# The single biggest variable cost is discovering how to test. Record the commands
+# once, expose one `verify` entry point, and name it in every task's Verification
+# line. Detection never guesses: an unmatched stack records `unresolved` (FR-006).
+CMD_TEST=""; CMD_LINT=""; CMD_TYPECHECK=""; CMD_BUILD=""
+if [[ -f "$ROOT/package.json" ]]; then
+  PM="npm"
+  [[ -f "$ROOT/pnpm-lock.yaml" ]] && PM="pnpm"
+  [[ -f "$ROOT/yarn.lock" ]] && PM="yarn"
+  grep -qE '"(test)"[[:space:]]*:'      "$ROOT/package.json" && CMD_TEST="$PM test"
+  grep -qE '"(lint)"[[:space:]]*:'      "$ROOT/package.json" && CMD_LINT="$PM run lint"
+  grep -qE '"(typecheck)"[[:space:]]*:' "$ROOT/package.json" && CMD_TYPECHECK="$PM run typecheck"
+  grep -qE '"(build)"[[:space:]]*:'     "$ROOT/package.json" && CMD_BUILD="$PM run build"
+fi
+if [[ -z "$CMD_TEST" ]] && [[ -f "$ROOT/pyproject.toml" || -f "$ROOT/pytest.ini" || -f "$ROOT/tox.ini" ]]; then
+  CMD_TEST="python3 -m pytest"
+fi
+if [[ -f "$ROOT/Cargo.toml" ]]; then
+  [[ -z "$CMD_TEST" ]] && CMD_TEST="cargo test"
+  [[ -z "$CMD_LINT" ]] && CMD_LINT="cargo clippy"
+fi
+if [[ -f "$ROOT/go.mod" ]] && [[ -z "$CMD_TEST" ]]; then
+  CMD_TEST="go test ./..."
+fi
+if [[ -f "$ROOT/Makefile" ]] && [[ -z "$CMD_TEST" ]] && grep -qE '^test:' "$ROOT/Makefile"; then
+  CMD_TEST="make test"
+fi
+
+CMDS_FILE="$(mktemp)"
+{
+  printf '## Commands\n\n'
+  printf 'Detected for this project by `speckit-init`. Run `./scripts/verify` for test → lint → typecheck.\n\n'
+  printf '| Purpose | Command |\n| --- | --- |\n'
+  cmd_row test "$CMD_TEST"
+  cmd_row lint "$CMD_LINT"
+  cmd_row typecheck "$CMD_TYPECHECK"
+  cmd_row build "$CMD_BUILD"
+  if [ -n "$CMD_TEST$CMD_LINT$CMD_TYPECHECK$CMD_BUILD" ]; then
+    printf '| **verify** | `./scripts/verify` |\n'
+  fi
+} > "$CMDS_FILE"
+write_managed_block "$AGENTS" "$CMDS_START" "$CMDS_END" "$CMDS_FILE" "commands block"
+rm -f "$CMDS_FILE"
+
+VERIFY="$ROOT/scripts/verify"
+if [ -n "$CMD_TEST$CMD_LINT$CMD_TYPECHECK$CMD_BUILD" ]; then
+  if [ -f "$VERIFY" ]; then
+    say "scripts/verify already present — left as is"
+  else
+    mkdir -p "$ROOT/scripts"
+    {
+      printf '#!/usr/bin/env bash\n'
+      printf '# Generated by speckit-init. Runs the project checks in order; stops at the first failure.\n'
+      printf 'set -euo pipefail\n'
+      printf 'run() { printf "\\n== %%s ==\\n" "$1"; shift; "$@"; }\n'
+      [ -n "$CMD_TEST" ]      && printf 'run "test" %s\n' "$CMD_TEST"
+      [ -n "$CMD_LINT" ]      && printf 'run "lint" %s\n' "$CMD_LINT"
+      [ -n "$CMD_TYPECHECK" ] && printf 'run "typecheck" %s\n' "$CMD_TYPECHECK"
+      [ -n "$CMD_BUILD" ]     && printf 'run "build" %s\n' "$CMD_BUILD"
+    } > "$VERIFY"
+    chmod +x "$VERIFY"
+    say "generated scripts/verify"
+  fi
+else
+  warn "no test/lint/build command detected — Commands block records 'unresolved'; no scripts/verify generated"
+  warn "  add a manifest (package.json / pyproject.toml / Makefile) or set the command by hand, then re-run"
+fi
 
 # --- 8. Let the extension seed its managed block ------------------------------
 bash .specify/extensions/agent-context/scripts/bash/update-agent-context.sh >/dev/null 2>&1 || true

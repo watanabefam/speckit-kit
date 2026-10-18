@@ -3,7 +3,7 @@ schema_version: "1.0"
 preset:
   id: "spec-driven-development"
   name: "Spec-Driven Development Addenda"
-  version: "1.11.0"
+  version: "1.12.0"
   description: "Appends problem framing, traceability, approval boundaries and verification sections to the core spec, plan and task templates without replacing them."
   author: "watanabefam"
   repository: "https://github.com/watanabefam/speckit-kit"
@@ -49,7 +49,7 @@ provides:
     - type: "command"
       name: "speckit.implement"
       file: "commands/speckit.implement.prepend.md"
-      description: "Prepends the execution rules: approved work only, evidence before done, honest task ticking, repair the earliest artifact on contradiction"
+      description: "Prepends the execution rules: approved work only, continuous execution with an execution budget, evidence before done, honest task ticking, repair the earliest artifact on contradiction"
       strategy: "prepend"
 
     - type: "command"

@@ -86,12 +86,92 @@ else
   bad "commands/speckit.md missing — there is no deterministic entry point"
 fi
 
+hdr "1d2. autonomy artifacts (boundary, contract, commands block, fast lane)"
+# The permission boundary is the mechanical layer; the contract is one file; the
+# commands block and verify come from detection; the fast lane is installer-copied.
+PERM_SRC="$ROOT/permissions/opencode-permission.jsonc"
+if [ -f "$PERM_SRC" ]; then
+  ok "permissions/opencode-permission.jsonc present"
+  for needle in '"git push*--force*": "deny"' '"npm publish*": "deny"' \
+                '"supabase db reset*": "deny"' '"git push*": "ask"'; do
+    if grep -qF "$needle" "$PERM_SRC"; then ok "permission block carries: $needle"; else bad "permission block missing: $needle"; fi
+  done
+else
+  bad "permissions/opencode-permission.jsonc missing — no boundary to install"
+fi
+
+CONTRACT_SRC="$ROOT/global/autonomy-contract.md"
+if [ -f "$CONTRACT_SRC" ]; then
+  ok "global/autonomy-contract.md present"
+  for needle in "## Done" "## Continuing" "## Decision needed" "## Approval required"; do
+    if grep -qF "$needle" "$CONTRACT_SRC"; then ok "contract carries: $needle"; else bad "contract missing: $needle"; fi
+  done
+else
+  bad "global/autonomy-contract.md missing"
+fi
+
+QUICK_SRC="$ROOT/commands/speckit.quick.md"
+if [ -f "$QUICK_SRC" ]; then
+  ok "commands/speckit.quick.md present"
+  for needle in "fast lane" "failing test" "promote" "quick-log"; do
+    if grep -qF "$needle" "$QUICK_SRC"; then ok "fast lane carries: $needle"; else bad "fast lane missing: $needle"; fi
+  done
+else
+  bad "commands/speckit.quick.md missing — the fast lane does not exist"
+fi
+
+# The installer must install all four. The fast lane cannot be a preset command — a
+# preset cannot create a command, so it must be installer-copied.
+for needle in "opencode-permission.jsonc" "autonomy-contract.md" "SPECKIT-COMMANDS" "speckit.quick.md"; do
+  if grep -qF "$needle" "$ROOT/bin/speckit-init"; then ok "installer handles: $needle"; else bad "installer never handles: $needle"; fi
+done
+
+# FR-004: the contract lives in exactly one file — no command may carry the buckets.
+if grep -lE '^## (Done|Continuing|Decision needed|Approval required)$' "$ROOT"/preset/commands/*.prepend.md >/dev/null 2>&1; then
+  bad "a command prepend carries the four-bucket contract prose (FR-004: one file only)"
+else
+  ok "no command prepend duplicates the autonomy contract"
+fi
+
+hdr "1d3. property P-003 — every irreversible action resolves to deny"
+# opencode evaluates the rules in order and the LAST match wins, so the resolution is
+# a fold, not a first-match. The list includes the trailing-flag force-push that a
+# naive glob misses (R5).
+python3 - "$PERM_SRC" <<'PY' || fail=1
+import json, re, sys, fnmatch
+p = sys.argv[1]
+raw = open(p, encoding="utf-8").read()
+raw = re.sub(r'(?m)^\s*//.*$', '', raw)      # strip full-line // comments only
+raw = re.sub(r',(\s*[}\]])', r'\1', raw)     # strip trailing commas
+rules = list(json.loads(raw).get("permission", {}).get("bash", {}).items())
+def resolves(cmd):
+    out = None
+    for pat, act in rules:
+        if fnmatch.fnmatch(cmd, pat):
+            out = act
+    return out
+irreversible = [
+    "git push --force origin main",
+    "git push origin main --force",
+    "git commit --no-verify -m x",
+    "git -c core.hooksPath=/dev/null commit -m x",
+    "npm publish", "pnpm publish", "yarn publish", "cargo publish",
+    "supabase db push", "supabase db reset", "prisma migrate reset --force",
+]
+# NOTE: `git push -f` is not here — a glob cannot express it without false-positiving
+# on `--follow-tags`. It is covered by the token-based hook 3 and tested in §1f.
+bad = [c for c in irreversible if resolves(c) != "deny"]
+if bad:
+    print("  FAIL  not denied: " + "; ".join(bad)); sys.exit(1)
+print("  ok    all %d irreversible actions resolve to deny" % len(irreversible))
+PY
+
 hdr "1f. hooks — the only layer that can actually enforce"
 HK="$ROOT/hooks/speckit-hooks.yaml"
 if [ -f "$HK" ]; then
   ok "hooks/speckit-hooks.yaml present"
   # The two hooks, and the property that makes them enforcement rather than advice.
-  for needle in "block-commit-no-verify" "protect-generated-files" "action: stop" "exit 2"; do
+  for needle in "block-commit-no-verify" "protect-generated-files" "block-force-push" "action: stop" "exit 2"; do
     if grep -q "$needle" "$HK"; then ok "hook file carries: $needle"; else bad "hook file missing: $needle"; fi
   done
   # The no-verify guard must BEHAVE, not just exist. A keyword check passes a hook
@@ -125,6 +205,32 @@ PY
       [ "$(hk_verdict "$c")" = "ALLOW" ] || { bad "no-verify guard BLOCKS benign: $c"; hk_fail=1; }
     done
     [ "$hk_fail" = "0" ] && ok "no-verify predicate blocks 4 bypass forms, allows 3 benign (behavioral, not keywords)"
+  fi
+  # Hook 3 (force-push) must also BEHAVE. A `-f` glob would false-positive on
+  # `--follow-tags`, so this predicate is the only thing covering `git push -f`;
+  # exercise it against the exact awk the hook ships.
+  AWK3="$(python3 - "$HK" <<'PY'
+import re, sys
+raw = open(sys.argv[1]).read()
+for m in re.finditer(r"awk '\n(.*?)\n            '\s*<<<", raw, re.S):
+    if "saw_push" in m.group(1):
+        print(m.group(1)); break
+PY
+)"
+  if [ -z "$AWK3" ]; then
+    bad "could not extract the force-push awk predicate — gate cannot test it"
+  else
+    fp_verdict() { printf '%s' "$1" | awk "$AWK3" | grep -q . && echo BLOCK || echo ALLOW; }
+    fp_fail=0
+    for c in "git push --force origin main" "git push origin main --force" \
+             "git push -f origin main" "git push -f" "git -C repo push -f origin main" \
+             "git push origin +main"; do
+      [ "$(fp_verdict "$c")" = "BLOCK" ] || { bad "force-push guard ALLOWS: $c"; fp_fail=1; }
+    done
+    for c in "git push origin main" "git push --follow-tags" "git push --tags" "git status"; do
+      [ "$(fp_verdict "$c")" = "ALLOW" ] || { bad "force-push guard BLOCKS benign: $c"; fp_fail=1; }
+    done
+    [ "$fp_fail" = "0" ] && ok "force-push predicate blocks 6 force forms, allows 4 benign (behavioral, not keywords)"
   fi
   # It must not protect the files that are MEANT to be edited.
   if grep -q ".specify/memory/constitution.md" "$HK" && grep -q "ALLOW" "$HK"; then
@@ -424,8 +530,8 @@ need(not bad, "every command entry uses strategy: prepend (never replace)")
 expected = {
     "commands/speckit.specify.prepend.md":   ["Section integrity", "resolve-template.sh", "Choose the workflow first", "Ask only what materially matters"],
     "commands/speckit.plan.prepend.md":      ["Section integrity", "resolve-template.sh", "Sweep before you list", "go to the primary source", "not to survey the topic", "Never cite what you did not open", "Stop at the approval gate"],
-    "commands/speckit.tasks.prepend.md":     ["Section integrity", "resolve-template.sh", "traces to a requirement", "Control scope"],
-    "commands/speckit.implement.prepend.md": ["Evidence before", "Tick tasks honestly", "earliest"],
+    "commands/speckit.tasks.prepend.md":     ["Section integrity", "resolve-template.sh", "traces to a requirement", "recorded verification command", "Control scope"],
+    "commands/speckit.implement.prepend.md": ["Evidence before", "Tick tasks honestly", "execution budget", "earliest"],
     "commands/speckit.converge.prepend.md":  ["Completion requires evidence", "round up to green", "did not do the work", "Every finding carries evidence", "Stop when no UNRESOLVED", "Send the negative case first", "Handoff discipline"],
 }
 files = set(re.findall(r'(?m)^\s+file:\s*"(commands/[^"]+)"', raw))
@@ -609,7 +715,9 @@ if [ "$E2E" = "1" ]; then
     T="$(mktemp -d)"
     trap 'rm -rf "$T"' EXIT
     git init -q "$T"
-    ( cd "$T" && printf '# scratch\n' > README.md && git add -A \
+    ( cd "$T" && printf '# scratch\n' > README.md \
+      && printf '{\n  "name": "scratch",\n  "scripts": { "test": "node -e 0", "lint": "node -e 0" }\n}\n' > package.json \
+      && git add -A \
       && git -c user.email=e@e -c user.name=e commit -qm init )
     if "$ROOT/bin/speckit-init" "$T" >/dev/null 2>&1; then
       ok "speckit-init completed"
@@ -617,6 +725,25 @@ if [ "$E2E" = "1" ]; then
       bad "speckit-init failed"
     fi
     cd "$T"
+    # The mechanical boundary, the commands block, the verify entry point, the
+    # contract and the fast lane must all be present in a real install.
+    if [ -f opencode.json ] && grep -qF '"git push*--force*": "deny"' opencode.json; then
+      ok "install wrote the permission boundary (opencode.json)"
+    else
+      bad "install did not write the permission boundary"
+    fi
+    if grep -q "SPECKIT-COMMANDS START" AGENTS.md && grep -q '| test |' AGENTS.md; then
+      ok "install wrote the Commands block with the detected test command"
+    else
+      bad "install did not write the Commands block"
+    fi
+    if [ -x scripts/verify ] && grep -q 'run "test" npm test' scripts/verify; then
+      ok "install generated scripts/verify from detection"
+    else
+      bad "install did not generate scripts/verify"
+    fi
+    if [ -f .opencode/autonomy-contract.md ]; then ok "install placed the autonomy contract"; else bad "autonomy contract not installed"; fi
+    if [ -f .opencode/commands/speckit.quick.md ]; then ok "install copied the fast lane"; else bad "fast lane not installed"; fi
     # Parallelize the 4 resolves: each runs in the background and records its
     # pass/fail in a status file, then `wait` joins them. The reporting loop
     # below stays in the original order so ok/bad output is unchanged.
@@ -671,6 +798,8 @@ if [ "$E2E" = "1" ]; then
       "$ROOT/bin/speckit-init" "$U" >/dev/null 2>&1 || true
       "$ROOT/bin/speckit-uninit" "$U" >/dev/null 2>&1 || true
       if [ -d "$U/.specify" ]; then bad "uninit left .specify/ behind"; else ok "uninit removed .specify/"; fi
+      if [ -f "$U/opencode.json" ]; then bad "uninit left the permission boundary behind"; else ok "uninit removed the permission boundary"; fi
+      if [ -f "$U/.opencode/autonomy-contract.md" ]; then bad "uninit left the autonomy contract"; else ok "uninit removed the autonomy contract"; fi
       if [ -f "$U/AGENTS.md" ] && grep -q "Keep me." "$U/AGENTS.md"; then
         ok "uninit preserved the user's own AGENTS.md content"
       else
@@ -685,7 +814,20 @@ if [ "$E2E" = "1" ]; then
     else
       bad "bin/speckit-uninit missing or not executable"
     fi
-    for m in "SPECKIT-BRIDGE START" "SPECKIT-BRIDGE END" "<!-- SPECKIT START -->" "<!-- SPECKIT END -->"; do
+    # P-002: an existing opencode.json is never clobbered (FR-002).
+    N="$(mktemp -d)"
+    git init -q "$N"
+    printf '{\n  "permission": "allow"\n}\n' > "$N/opencode.json"
+    ( cd "$N" && git add -A && git -c user.email=e@e -c user.name=e commit -qm init )
+    cp "$N/opencode.json" "$N/opencode.json.before"
+    "$ROOT/bin/speckit-init" "$N" >/dev/null 2>&1 || true
+    if cmp -s "$N/opencode.json" "$N/opencode.json.before"; then
+      ok "installer never clobbers an existing opencode.json"
+    else
+      bad "installer modified an existing opencode.json"
+    fi
+    rm -rf "$N"
+    for m in "SPECKIT-BRIDGE START" "SPECKIT-BRIDGE END" "SPECKIT-COMMANDS START" "SPECKIT-COMMANDS END" "<!-- SPECKIT START -->" "<!-- SPECKIT END -->"; do
       c=$(grep -c "$m" AGENTS.md 2>/dev/null || true)
       if [ "$c" = "1" ]; then ok "marker once: $m"; else bad "marker $m appears $c times"; fi
     done
@@ -701,6 +843,8 @@ if [ "$E2E" = "1" ]; then
     #   1. re-running loses or alters no content,
     #   2. no marker is ever duplicated, and
     #   3. it reaches a fixed point.
+    cp scripts/verify /tmp/sg-verify1
+    cp opencode.json /tmp/sg-oc1
     cp AGENTS.md /tmp/sg-run1.md
     "$ROOT/bin/speckit-init" "$T" >/dev/null 2>&1 || true
     cp AGENTS.md /tmp/sg-run2.md
@@ -719,7 +863,13 @@ if [ "$E2E" = "1" ]; then
     else
       bad "does not reach a fixed point: run2 != run3"
     fi
-    rm -f /tmp/sg-run1.md /tmp/sg-run2.md /tmp/sg-run3.md
+    # P-001 (partial): the other installer-owned artifacts are idempotent too.
+    if cmp -s scripts/verify /tmp/sg-verify1 && cmp -s opencode.json /tmp/sg-oc1; then
+      ok "re-run leaves scripts/verify and opencode.json unchanged"
+    else
+      bad "re-run altered scripts/verify or opencode.json"
+    fi
+    rm -f /tmp/sg-run1.md /tmp/sg-run2.md /tmp/sg-run3.md /tmp/sg-verify1 /tmp/sg-oc1
   else
     printf '  skip  specify CLI not on PATH (install with: uv tool install specify-cli)\n'
   fi

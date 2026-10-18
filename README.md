@@ -17,6 +17,9 @@ using Spec Kit's own extension points rather than forking it.
 | `preset/` | Spec Kit **preset** — `strategy: "append"` on 4 templates **+ `prepend` on 5 commands** | Adds EARS requirements guidance and correctness properties, delivery principles and traceability sections to the templates, **and** puts each step's enforceable rules into the command that runs that step |
 | `skill/spec-driven-development/` | **Agent skill** (agentskills.io) | The *reasoning* layer — why the rules exist and what they prevent. Does not restate them |
 | `global/working-agreements.md` | Global agent rules | Routing only (~25 lines): "this project uses Spec Kit, load the skill" |
+| `global/autonomy-contract.md` | Installed instruction file | The four-bucket handoff (Done · Continuing · Decision needed · Approval required). **One file, not prose in every command** |
+| `permissions/opencode-permission.jsonc` | opencode config | The **mechanical boundary**: `deny` force-push / publish / destructive DB, `ask` on push, reset, clean. Installed into the project's `opencode.json` (never clobbering one that exists) |
+| `commands/speckit.quick.md` | Installer-copied command | The fast lane for small work — a preset cannot create a command, so the installer copies it |
 | `bin/speckit-init` | Installer | One command to set a project up |
 | `evals/` | Skill evaluations | Behaviour evals + **trigger-accuracy evals** (the failure mode that's silent) |
 | `scripts/self-gate.sh` + `.github/workflows/` | CI | The kit gates itself on every push, on Linux **and** macOS bash 3.2 |
@@ -65,7 +68,7 @@ to the command that runs that step:
 | `speckit.specify` | workflow selection, product reasoning, ask only what matters, record assumptions instead of inventing requirements |
 | `speckit.plan` | inspect before proposing, the sweep for re-enumerated sets, repository-as-evidence, stop at the approval gate |
 | `speckit.tasks` | every task traces to a requirement, one verifiable outcome, scope control |
-| `speckit.implement` | approved work only, evidence before "done", tick tasks honestly, repair the earliest artifact |
+| `speckit.implement` | approved work only, continuous execution with an execution budget, evidence before "done", tick tasks honestly, repair the earliest artifact |
 | `speckit.converge` | evidence-based completion, no rounding up to green, verify declared boundaries, handoff discipline |
 
 This is also what the ecosystem does: across 41 community presets, **39 use commands, 0 use
@@ -165,6 +168,7 @@ Then the loop:
 
 | Step | Command | Produces |
 | --- | --- | --- |
+| a small, well-understood fix | `/speckit.quick` | a `specs/quick-log.md` entry (no artifacts) |
 | principles (once) | `/speckit.constitution` | `.specify/memory/constitution.md` |
 | what and why | `/speckit.specify` | `spec.md` |
 | how | `/speckit.plan` | `plan.md` |
@@ -276,11 +280,14 @@ See `BUILD_PLAN.md` for the research and decisions behind the structure.
 ```
 QUICKSTART.md                   paste-to-your-AI setup; one command, verified unattended
 commands/speckit.md               the /speckit entry point (deterministic; the 100% path)
+commands/speckit.quick.md         the fast lane (installer-copied; no spec/plan/tasks artifacts)
+permissions/opencode-permission.jsonc  the mechanical boundary, merged into the project opencode.json
 bin/speckit-init                  installer (idempotent; uses `preset update`)
 bin/speckit-uninit                reverse it (preserves your own content)
 preset/                           spec-kit preset (append ×4, prepend ×5)
 skill/spec-driven-development/    agent skill + references
 global/working-agreements.md      global routing rules
+global/autonomy-contract.md       the four-bucket handoff (installed to .opencode/)
 evals/                            behaviour + trigger evals, two runners, hang regression test
 scripts/self-gate.sh              the kit's own gate
 .github/workflows/self-gate.yml   runs that gate on Linux and macOS

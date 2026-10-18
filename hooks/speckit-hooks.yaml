@@ -12,12 +12,12 @@
 # layer that actually holds — a hook runs regardless of what the model decides.
 #
 # It is deliberately tiny. A hook that is wrong about something urgent gets
-# removed, and then none of them work. Both hooks here are near-zero-false-positive
+# removed, and then none of them work. All three hooks here are near-zero-false-positive
 # and block only things that are wrong in essentially every case.
 #
 # Blocking contract (from the plugin): a bash action that exits 2 blocks the tool
-# call. `action: stop` additionally aborts the session — used here only for the
-# bypass hook, where continuing the session is not useful.
+# call. `action: stop` additionally aborts the session — used for the bypass and
+# force-push hooks, where continuing unattended is not useful.
 
 hooks:
   # ───────────────────────────────────────────────────────────────────────────
@@ -157,6 +157,58 @@ hooks:
                   ;;
               esac
             done <<< "$paths"
+
+            exit 0
+          timeout: 10000
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # 3. Force-push rewrites remote history.
+  #
+  # A permission glob cannot express this: `git push --force*` misses
+  # `git push origin main --force`, and a `-f` substring glob would false-positive
+  # on the benign `--follow-tags`. So it is token-based, like hook 1: walk the
+  # tokens, remember "we are past `git push`", and block the three unambiguous
+  # force signals — `-f`, `--force` / `--force-*`, and the `+<refspec>` prefix.
+  #
+  # `action: stop`: an unattended session that has just tried to rewrite remote
+  # history is not one to keep going.
+  # ───────────────────────────────────────────────────────────────────────────
+  - id: block-force-push
+    event: tool.before.bash
+    action: stop
+    actions:
+      - bash:
+          command: |
+            set -euo pipefail
+            payload=$(cat)
+
+            # ZERO-FORK PREFILTER — no "push" token, allow immediately.
+            case "$payload" in
+              *push* ) : ;;
+              *) exit 0 ;;
+            esac
+
+            command -v jq >/dev/null 2>&1 || exit 0
+            cmd=$(printf '%s' "$payload" | jq -r '.tool_args.command // empty' 2>/dev/null)
+            [ -z "$cmd" ] && exit 0
+
+            if awk '
+              {
+                saw_git = 0; saw_push = 0
+                for (i = 1; i <= NF; i++) {
+                  t = $i
+                  if (t == "git")  { saw_git = 1; continue }
+                  if (!saw_git)    continue
+                  if (t == "push") { saw_push = 1; continue }
+                  if (!saw_push)   continue
+                  if (t == "-f" || t == "--force" || t ~ /^--force-/) { print "BLOCK"; exit }
+                  if (t ~ /^\+/) { print "BLOCK"; exit }
+                }
+              }
+            ' <<<"$cmd" | grep -q BLOCK; then
+              echo "BLOCKED: this is a force-push, which rewrites remote history. It is not available in this repo — if you believe history must change, say so and let a human run it." >&2
+              exit 2
+            fi
 
             exit 0
           timeout: 10000

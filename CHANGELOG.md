@@ -7,6 +7,68 @@ The preset version lives in `preset/preset.yml` and is what `specify preset info
 
 ## [Unreleased]
 
+## [1.12.0] — 2026-10-17
+
+### Added — a mechanical autonomy boundary, one-command verification, continuous execution, and a fast lane
+
+The kit's approval boundary lived in prompt text, which the kit itself says cannot enforce anything.
+The research for this feature (`specs/003-autonomous-throughput/research.md`, 31 sources) is
+consistent that the dominant cost of AI-assisted development is human round-trips and rework rather
+than generation, that the boundary belongs in tool permissions, and that adding more rules to a
+prompt spends a finite instruction budget. This release acts on that.
+
+- **A permission boundary, installed by `bin/speckit-init` (§2d).** A `permission` block is written
+  to the project `opencode.json` — created if absent, **printed and never written** if the project
+  already has one. It denies force-push (any flag position), `--no-verify` and `core.hooksPath`
+  overrides, package publish, and destructive database commands; it gates push/reset/clean with
+  `ask`. Order is load-bearing: opencode evaluates in order and the **last match wins**, so the
+  catch-all is first and the specific denies are last.
+- **An autonomy contract, one file (§2e).** `global/autonomy-contract.md` installs to
+  `.opencode/autonomy-contract.md` and defines the four-bucket handoff (Done · Continuing · Decision
+  needed · Approval required). The routing block points at it with **one line** — no `/speckit.*`
+  command carries the prose, because the instruction budget is finite.
+- **A `## Commands` block and a `scripts/verify` entry point (§6b).** `speckit-init` detects the
+  stack (Node, Python, Rust, Go, Make), records install/test/lint/typecheck/build in a managed
+  `AGENTS.md` block, and generates one `verify` entry point. Detection never guesses: an unmatched
+  stack records `unresolved` and generates nothing.
+- **Continuous execution with a budget.** `preset/commands/speckit.implement.prepend.md` gains an
+  "execute continuously, with a stopping condition" rule: run the whole approved `tasks.md` without
+  a per-phase confirmation, and halt only on the execution budget (3 consecutive failures), an
+  approval gate, or a missing credential.
+- **A fast lane, `/speckit.quick`.** Small, well-understood work skips the artifacts entirely:
+  failing test first for a defect, smallest change, `verify`, one `specs/quick-log.md` entry — and
+  **promote to `/speckit.specify` if it grows**. It is installer-copied, because a preset cannot
+  create a new command (a `type: "command"` entry naming one is silently ignored).
+- **A third hook, `block-force-push`.** A glob cannot express `git push -f` without false-positiving
+  on the benign `--follow-tags`, so the short-flag force-push is token-based, like the no-verify
+  hook. It blocks `-f`, `--force` / `--force-*`, and the `+<refspec>` prefix, and `self-gate.sh` §1f
+  exercises that exact predicate against six force forms and four benign ones.
+- **`bin/speckit-uninit` reverses all of it** — and only removes what is still byte-identical to
+  what the kit installed.
+
+### Why the boundary is mechanical, not more prose
+
+The kit already states its own position: "a rule that cannot be violated needs a hook or a
+permission, not a command." The research makes the cost concrete — excessive permissions and
+excessive autonomy are named root causes of damaging agent actions (OWASP LLM06), coding agents
+carry ambient authority that indirect prompt injection exploits, and rule files themselves are an
+attack surface. The boundary is therefore in `opencode.json`, where it is reviewable and versioned,
+not in a paragraph the model may or may not follow.
+
+### Deliberately not done
+
+- **No isolation, no parallelism.** Worktrees, containers, and parallel `[P]` dispatch are parked
+  with revisit conditions in the spec — each is a separate failure surface.
+- **No new runtime dependency.** Bash, `python3`, and `git` only.
+- **No enforcement claim for the prose.** The continuous-execution rule and the fast lane are
+  commands; only the permission block and the two existing hooks can refuse a tool call.
+
+`scripts/self-gate.sh` gains §1d2 (the four artifacts, and that no command duplicates the contract),
+§1d3 (property **P-003**: every irreversible action resolves to `deny`, including the trailing-flag
+force-push a naive glob misses), and §5 assertions for the boundary, the Commands block,
+`scripts/verify`, the contract, the fast lane, no-clobber, and idempotence. `SKILL.md` and
+`README.md` are updated.
+
 ## [1.11.0] — 2026-10-16
 
 ### Added — an independent review step and a stress test in `/speckit.converge`
