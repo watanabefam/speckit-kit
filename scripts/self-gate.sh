@@ -1121,7 +1121,7 @@ if [ ! -f "$SIC" ]; then
   bad "scripts/check-section-integrity.sh is missing — the section-integrity rule is prose-only again"
 else
   SICD="$(mktemp -d)"
-  if bash "$ROOT/.specify/scripts/bash/resolve-template.sh" spec-template > "$SICD/ok.md" 2>/dev/null \
+  if bash "$ROOT/.specify/scripts/bash/resolve-template.sh" spec-template > "$SICD/ok.md" 2>"$SICD/err" \
      && [ -s "$SICD/ok.md" ]; then
     # A conformant artifact is the resolved template itself: every required heading is present.
     if bash "$SIC" "$ROOT" spec-template "$SICD/ok.md" >/dev/null 2>&1; then
@@ -1139,6 +1139,9 @@ else
     fi
   else
     bad "could not resolve spec-template to build the conformance fixture"
+    # Surface the resolver's own error: discarding stderr is why this failed on one
+    # runner for a whole push with no way to tell why.
+    sed 's/^/        /' "$SICD/err" 2>/dev/null | tail -10
   fi
   rm -rf "$SICD"
 fi
