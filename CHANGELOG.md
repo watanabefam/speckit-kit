@@ -15,20 +15,23 @@ The preset version lives in `preset/preset.yml` and is what `specify preset info
   what gives it a test: `self-gate.sh` §1i asserts it with an **oracle** (eight cases — a gap, a fix
   round, a tick with no ledger line) and with **metamorphic relations** across a targeted interrupt —
   progress is monotone, and no task completes twice.
-- **`evals/run-scenario-evals.py`** automates the judgement scenarios from `quickstart.md` that have
-  an observable oracle: S4 (the boundary refuses) and S8 (the fast lane). It asserts what is
-  observable — which files were or were not created, whether a refusal was printed — never the
-  model's internal choices. `self-gate.sh` §1j runs it against a **scripted agent**, including a
-  negative control proving the assertions can fail; the live pass is a deliberate separate run
-  because it spends model calls. **S9 (the budget halt) stays live-only** — it is prompt behaviour
-  with no observable file effect, and `quickstart.md` now says so rather than implying coverage it
-  does not have.
-- **The live pass ran on 2026-10-19:** `ok S4 (live)`, `ok S8 (live)`. Running it found three real
-  harness defects, each by running rather than reading: a nested `opencode run` resolved to the *kit*
-  repo (fixed with an explicit `--dir` plus scrubbing `OPENCODE_*`, and a containment guard that
-  fingerprints the kit repo before and after); S4's first failure was unreadable because the output
-  was discarded; and S8's first failure was the assertion, not the behaviour. Each fix follows the
-  same rule the gate now applies throughout: **surface the evidence on failure.**
+- **`evals/run-scenario-evals.py`** automates the judgement scenarios from `quickstart.md` — S4 (the
+  boundary holds), S8 (the fast lane), S9 (the budget halt) — asserting what is **observable** and
+  never the model's internal choices: a file that must still exist, the artifacts that must not have
+  been created, and the terminal state of a run that must end. S9 is judged **from outside** — the
+  run ends, and the failing task is still unticked with no `complete` ledger line — because a halt
+  scenario is exactly where a self-report is least trustworthy. `self-gate.sh` §1j runs it against a
+  **scripted agent**, including negative controls proving each assertion can fail; the live pass is a
+  deliberate separate run because it spends model calls.
+- **The live pass ran on 2026-10-19:** `ok S4 (live)`, `ok S8 (live)`, `ok S9 (live)`. Running it
+  found four real harness defects, each by running rather than reading: a nested `opencode run`
+  resolved to the *kit* repo (fixed with an explicit `--dir` plus scrubbing `OPENCODE_*`, and a
+  containment guard that fingerprints the kit repo before and after); S4's first failure was
+  unreadable because the output was discarded; S8's first failure was the assertion, not the
+  behaviour; and S4's second failure was a **flaky assertion** — it required a refusal in the text,
+  which fails whenever the agent declines to attempt rather than being blocked. It now asserts the
+  outcome, which is the oracle the literature prescribes. Each fix follows the same rule the gate now
+  applies throughout: **surface the evidence, and assert the observable.**
 
 ### Added — a template section the constitution lacks is reported as a DECISION, not drift
 

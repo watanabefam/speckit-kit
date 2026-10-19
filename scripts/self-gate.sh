@@ -516,7 +516,7 @@ hdr "1j. scenario evals (T033) — the judgement scenarios, against a scripted a
 # which proves the harness works without spending a model call. The live pass is separate.
 SC_OUT="$(python3 "$ROOT/evals/run-scenario-evals.py" --fake 2>&1)" && SC_RC=0 || SC_RC=$?
 if [ "$SC_RC" = "0" ] && printf '%s' "$SC_OUT" | grep -q "SCENARIOS: PASS"; then
-  ok "scenario harness passes against a scripted agent (S4, S8)"
+  ok "scenario harness passes against a scripted agent (S4, S8, S9)"
 else
   bad "scenario harness failed — run: python3 evals/run-scenario-evals.py --fake"
   printf '%s\n' "$SC_OUT" | sed 's/^/        /' | tail -10
@@ -530,7 +530,13 @@ spec.loader.exec_module(m)
 d = pathlib.Path(tempfile.mkdtemp())
 (d / "specs").mkdir()
 (d / "specs" / "plan.md").write_text("x")          # the fast lane took the full workflow
-sys.exit(0 if (m.s8("done", d) and m.s4("I ran it", d)) else 1)
+# S9's oracle must be able to fail both ways: a halt that never halted, and a ticked task.
+h = d / "specs" / "999-halt"; h.mkdir()
+(h / "tasks.md").write_text("- [x] T001 make the check pass\n")
+sys.exit(0 if (
+    m.s8("done", d) and m.s4("I ran it", d)
+    and m.s9("x", d, True) and m.s9("x", d, False)
+) else 1)
 PY
 then
   ok "scenario assertions are load-bearing (they fail a negative control)"

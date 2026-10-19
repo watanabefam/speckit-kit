@@ -150,6 +150,30 @@ future change to the semantics fails the gate instead of silently disarming the 
 both semantics agree. Prefer the layer whose semantics the kit owns (a hook) for anything a glob
 cannot express.
 
+## Finding 8 — a stop-behaviour has an observable oracle; a self-report is the weakest one
+
+The question for S9 was whether "the run ended and the failing task is still unticked" is a sound
+oracle for a halt, or whether it needs a marker file the agent writes about itself.
+
+- The agent-evaluation literature is unanimous that the oracle is the **state, not the message**:
+  "Production systems trust observable outcomes, not promises… The conversation tells you what the
+  agent intended to do. The system tells you what actually happened" [54]. "The final sentence is
+  evidence about what the agent claims. The environment state and retained action log are evidence
+  about what it did" — and "outcome checks should normally be **independent of the agent's output
+  channel**" [56].
+- A self-report is not merely weaker; it is *weakest exactly where S9 lives*: the incentive to report
+  progress that was not made is highest on "tasks where success is hard or impossible" [55] — and a
+  halt scenario is precisely such a task.
+- Termination is a property observed from outside, as a stable/terminal state [60]; "how the run
+  ended" is a standard assertion target in agent evals [57]; stop conditions belong in the behaviour
+  contract itself [58]; and every clause of a defined outcome becomes an evaluation point [59].
+- Self-reports are systematically biased in measurement generally [61][62], so this is not an
+  agent-specific quirk.
+
+**Resolution:** S9 asserts the terminal state (the run ended) and the environment (the failing task is
+unticked, the ledger has no `complete` line). No marker file is required — and adding one would make
+the check depend on the agent's own word, which is the one thing a halt scenario must not do.
+
 ## What the evidence does not support
 
 - **"More autonomy always means faster."** The 2025 result was a slowdown; the 2026 result is too
@@ -290,3 +314,12 @@ fork in `plan.md`.
 [51] Temporal. *Long-Running Activity — Heartbeats* ("Test resumption"). https://docs.temporal.io/design-patterns/long-running-activity
 [52] Flowproof. *Agent testing* ("the model's decisions are RECORDED, not mocked"). https://automators.ai/flowproof/docs/agent-testing
 [53] duskel/cassette — *Deterministic record/replay for LLM and tool calls.* https://github.com/duskel/cassette
+[54] Salesforce Engineering (2026). *How to Evaluate AI Agents: Measure Outcomes, Not Responses.* https://engineering.salesforce.com/how-to-evaluate-production-ai-agents-measure-system-outcomes-not-conversations/
+[55] Qlarify Labs (2026). *Claimed-vs-actual action testing (agent self-report fidelity).* https://labs.qlarify.fi/evals/claimed-vs-actual-action-testing
+[56] Ou (2026). *Evaluating Agents and Capabilities* — AI as an Infrastructure. https://aaai.latere.ai/en/evaluation/evaluating-agents
+[57] Conductor (2026). *Agent Evals* ("asserts on what the agent actually did… how the run ended"). https://conductor-oss.github.io/conductor/devguide/ai/agent-evals.html
+[58] Microsoft (2026). *Agentic Behavior Engineering* — Azure Architecture Center (stop conditions in the behaviour contract). https://learn.microsoft.com/en-us/azure/architecture/ai-ml/guide/agentic-behavior-engineering
+[59] Google Developers Blog (2026). *Evaluating AI agents: moving past the vibe check.* https://developers.googleblog.com/en/evaluating-ai-agents-moving-past-the-vibe-check/
+[60] (2020). *Scalable Termination Detection for Distributed Actor Systems.* doi:10.4230/lipics.concur.2020.11
+[61] (2022). *Identifying Bias in Self-Reported Pro-Environmental Behavior.* doi:10.1016/j.cresp.2022.100087
+[62] (2022). *Bias in Self-Reports: An Initial Elevation Phenomenon.* doi:10.1177/19485506221129160
