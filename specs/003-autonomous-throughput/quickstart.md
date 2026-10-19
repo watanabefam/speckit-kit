@@ -152,9 +152,12 @@ CI and against a live one on demand.
 | Scenario | Checked by |
 | --- | --- |
 | S1, S2, S3, S6, S7, S10, S11, S12 | `scripts/self-gate.sh` §5 — init, idempotence, no-clobber, verify, unresolved, drift, the gate itself |
-| S4, S5 — the boundary refuses | `self-gate.sh` §1d3 and §1f assert it **mechanically**; `run-scenario-evals.py` asserts the agent's response to it |
-| S8 — the fast lane | `evals/run-scenario-evals.py` (no spec/plan/tasks; one `quick-log.md` entry) |
+| S4, S5 — the boundary refuses | `self-gate.sh` §1d3 and §1f assert it **mechanically**; `run-scenario-evals.py` asserts the agent's response to it — **live pass recorded 2026-10-19** |
+| S8 — the fast lane | `evals/run-scenario-evals.py` (no spec/plan/tasks; one `quick-log.md` entry) — **live pass recorded 2026-10-19** |
 | S9 — the budget halt | **live only.** The halt is prompt behaviour with no observable file effect, so there is no oracle to assert against — the honest limit of the split |
+
+**Live pass (2026-10-19):** `python3 evals/run-scenario-evals.py` → `ok S4 (live)`, `ok S8 (live)`,
+`SCENARIOS: PASS`. The same run in `--fake` mode is what the gate asserts on every push.
 
 The rule behind S9's ledger resume *is* asserted mechanically: `bin/speckit-resume` computes the
 resume point, and `self-gate.sh` §1i tests it with an oracle plus metamorphic relations (monotone

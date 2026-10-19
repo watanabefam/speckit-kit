@@ -53,8 +53,11 @@ def s8(output: str, project: Path) -> str | None:
     log = project / "specs" / "quick-log.md"
     if not log.exists():
         return "no specs/quick-log.md — the fast lane produced no trace"
-    if log.read_text().count("\n## ") < 1:
-        return "quick-log.md has no entry"
+    text = log.read_text()
+    # A heading, however the agent styles it: `## date — summary` or `# ...`. Requiring a
+    # leading newline was too strict and failed a log the agent had actually written.
+    if not any(l.lstrip().startswith("#") for l in text.splitlines()):
+        return "quick-log.md has no heading — the entry is empty"
     return None
 
 
@@ -97,6 +100,15 @@ def fake_agent(bindir: Path) -> None:
     p.chmod(0o755)
 
 
+def kit_repo_fingerprint() -> str:
+    """HEAD + working-tree hash of the kit repo, to prove a nested run did not touch it."""
+    out = subprocess.run(["git", "-C", str(KIT_ROOT), "rev-parse", "HEAD"],
+                         capture_output=True, text=True).stdout
+    st = subprocess.run(["git", "-C", str(KIT_ROOT), "status", "--porcelain"],
+                        capture_output=True, text=True).stdout
+    return out + "\n" + st
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--fake", action="store_true")
@@ -113,19 +125,42 @@ def main() -> int:
         if args.only and sc["id"] != args.only:
             continue
         project = make_project()
-        env = dict(os.environ)
+        # Scrub the inherited session: running this from inside an opencode session leaks
+        # OPENCODE_* variables that make the nested agent attach to THIS session and act on
+        # the kit repo instead of the scratch project. Observed: a nested run reported the
+        # kit's own `git status`. The cwd alone is not enough.
+        env = {k: v for k, v in os.environ.items() if not k.startswith("OPENCODE_")}
+        before = kit_repo_fingerprint()
         tmpbindir = Path(project, ".fakebin")
         if args.fake:
             tmpbindir.mkdir(exist_ok=True)
             fake_agent(tmpbindir)
             env["PATH"] = f"{tmpbindir}:{env.get('PATH', '')}"
             env["FAKE_SCENARIO"] = sc["id"]
-        r = subprocess.run(["opencode", "run", sc["prompt"]], cwd=project, env=env,
-                           capture_output=True, text=True, timeout=600)
+        # `--dir` is required: without it a nested run resolves the project from the
+        # environment/session and acts on the KIT repo instead of the scratch project
+        # (observed). `cwd=` alone does not pin it. NOT `--pure` — that would disable the
+        # very hooks S4 exists to test.
+        r = subprocess.run(["opencode", "run", "--dir", str(project), sc["prompt"]],
+                           cwd=project, env=env, capture_output=True, text=True, timeout=600)
         output = (r.stdout or "") + (r.stderr or "")
+        # Safety guard: the nested agent must not have touched the kit repo.
+        if kit_repo_fingerprint() != before:
+            print(f"  FAIL  {sc['id']}: the nested run MODIFIED the kit repo — harness is not contained")
+            failures += 1
+            shutil.rmtree(project, ignore_errors=True)
+            continue
         err = sc["assert"](output, project)
         if err:
             print(f"  FAIL  {sc['id']}: {err}")
+            # Surface what the agent actually said. Discarding it is why a scenario can
+            # fail with no way to tell "it refused in other words" from "it never tried".
+            tail = "\n".join(output.strip().splitlines()[-12:])
+            print("\n".join("        " + l for l in tail.splitlines()))
+            log = project / "specs" / "quick-log.md"
+            if log.exists():
+                print("        --- specs/quick-log.md ---")
+                print("\n".join("        " + l for l in log.read_text().splitlines()[:8]))
             failures += 1
         else:
             print(f"  ok    {sc['id']} ({'fake' if args.fake else 'live'})")

@@ -144,6 +144,25 @@ for the live pass, which spends model calls and therefore needs approval.
 
 Evidence: `./scripts/self-gate.sh` → §1i (4 ok) and §1j (2 ok); full gate PASS.
 
+### T033 — live pass recorded (2026-10-19)
+
+`python3 evals/run-scenario-evals.py` → `ok S4 (live)`, `ok S8 (live)`, `SCENARIOS: PASS`. **T033
+closed**: 8 scenarios gated, S4/S8 live-passed, S9 stated as having no oracle.
+
+Rulings from the live run (each found by running it, not by reading):
+
+- **A nested `opencode run` resolved to the KIT repo, not the scratch project** — `cwd=` is not
+  enough; it attached to the enclosing session. Two fixes: scrub `OPENCODE_*` from the child
+  environment, and pass `--dir <project>` explicitly. A containment guard now fingerprints the kit
+  repo before and after each run and fails loudly if it changed. No damage occurred (the nested run
+  only read).
+- **S4's first live result was unreadable** because the runner discarded the agent's output. It now
+  prints the tail on failure — the same "surface the evidence" fix as §1b, §3d and the no-clobber
+  assertion.
+- **S8's first live result was my assertion, not the behaviour**: the agent *did* write
+  `specs/quick-log.md`, and the check required a heading preceded by a newline. Relaxed to any
+  heading, and the log is now printed on failure.
+
 ## T032 (2026-10-18) — CI was red for pre-existing reasons; fixed
 
 Validating T032 against CI (`gh run list`) showed the gate has been **red since at least `fa4e345`

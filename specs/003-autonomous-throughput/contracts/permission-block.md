@@ -51,8 +51,8 @@ block is printed and the file is left untouched.
   the order silently downgrades a deny to an allow — the exact failure FR-003 exists to prevent.
 - **Fail-closed.** A command matching both an allow and a deny resolves to deny.
 - **No secrets.** No token, key, host credential, or path outside the project appears in the block.
-- **Editable.** The block is ordinary project config; a user may change it, and the change is visible
-  in the diff.
+- **No key removed or altered.** An existing project config keeps every key it had. Additions (such as
+  `$schema`, written by `opencode mcp add`) are allowed and are visible in the diff.
 
 ## Known limitation — globs cannot express flags or wrappers
 
@@ -93,6 +93,7 @@ fails the gate instead of silently disarming the boundary. No live session is re
 ## Acceptance
 
 1. No `opencode.json` → the file is created with the block above.
-2. Existing `opencode.json` → unchanged; the block and a merge instruction are printed.
+2. Existing `opencode.json` → no key it already had is removed or altered; the block and a merge
+   instruction are printed. An **addition** is permitted (the CiteKit step writes a `$schema` line).
 3. A denied command is blocked **without the model's cooperation** (opencode, not the prompt).
 4. Every entry on the irreversible list is matched by a `deny` rule (SC-002, P-003).

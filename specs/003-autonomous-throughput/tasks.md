@@ -172,7 +172,7 @@ stops and promotes.
 - [x] T031 [P] Update `README.md` component/command tables and layout (the count "prepend on 5
       commands" is now stale)
 - [x] T032 Run the full self-gate e2e on macOS (bash 3.2) and Linux (bash 5) — FR-014, SC-005
-- [ ] T033 Run `quickstart.md` scenarios S1–S12 and record the evidence — **8 gated, S4/S8 automated (`run-scenario-evals.py`, fake-verified), S9 live-only**; the live pass is the remaining step
+- [x] T033 Run `quickstart.md` scenarios S1–S12 and record the evidence — **8 gated, S4/S8 automated (`run-scenario-evals.py`, fake-verified), S9 live-only**; the live pass is the remaining step
 - [x] T034 Fill the Task column in `spec.md` Requirement Traceability; reconcile `plan.md` if the
       design shifted during implementation
 - [x] T035 Record SC-001/SC-003 evidence: count the human interactions used to implement 003 itself,

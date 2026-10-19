@@ -46,8 +46,9 @@ the change is reported.
 1. **Given** a project with no `opencode.json`, **When** `speckit-init` runs, **Then** a permission
    block is created that denies force-push, `--no-verify` / hooks-path overrides, package publish,
    and destructive database commands.
-2. **Given** a project that already has an `opencode.json`, **When** `speckit-init` runs, **Then**
-   the file is left unchanged and the permission block plus a merge instruction is printed.
+2. **Given** a project that already has an `opencode.json`, **When** `speckit-init` runs, **Then** no
+   key that file already had is removed or altered, and the permission block plus a merge instruction
+   is printed.
 3. **Given** a command that matches both an allow rule and a deny rule, **When** it is evaluated,
    **Then** it is denied.
 4. **Given** an installed kit, **When** a run begins, **Then** one autonomy-contract file defines the
@@ -146,7 +147,7 @@ promoted to `/speckit.specify`.
 
 - **Precedence conflict.** A command matching both allow and deny rules is denied (fail-closed).
 - **Existing configuration.** A project with its own `opencode.json` or `hooks.yaml` is never
-  clobbered; the kit prints what to merge.
+  clobbered — no key it already had is removed or altered; the kit prints what to merge.
 - **Undetectable stack.** Commands are recorded as unresolved; the installer asks once rather than
   inventing a command.
 - **Platform portability.** The installer and gate must pass on macOS system bash 3.2 and Linux bash 5;
@@ -165,7 +166,10 @@ promoted to `/speckit.specify`.
   a permission block that denies force-push, hook-bypass (`--no-verify`, `core.hooksPath` overrides),
   package publish, and destructive database commands.
 - **FR-002**: WHEN `speckit-init` runs in a project that already has an `opencode.json`, THE installer
-  SHALL leave it unchanged and SHALL print the permission block with a merge instruction.
+  SHALL remove or alter **no key that file already had**, and SHALL print the permission block with a
+  merge instruction. **Additions are permitted** — the CiteKit MCP step runs `opencode mcp add`, which
+  writes a `$schema` line. (Amended 2026-10-19: the original "leave it unchanged" was literally false
+  once that step landed, and byte-identity was stricter than the property that matters.)
 - **FR-003**: IF a command matches both an allow rule and a deny rule, THEN THE permission boundary
   SHALL deny it.
 - **FR-004**: THE installer SHALL install exactly one autonomy-contract instruction file defining the
