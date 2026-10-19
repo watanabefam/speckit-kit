@@ -124,6 +124,26 @@ most-specific" + "every deny is later than every non-deny"; full gate PASS.
 
 Remaining open in this spec: T021/T032/T033 (behavioural halves needing a live session; Linux bash 5).
 
+## T021 and T033 (2026-10-18) — researched, and T021 closed mechanically
+
+Researched online and on CiteKit. The load-bearing idea is the **oracle problem** [45]: T021's
+behavioural half has no oracle (it is the agent's behaviour), and **metamorphic testing** [46][47] is
+the established answer — assert *relations*, not exact output. Fault injection should be **targeted**
+at a representative boundary, not random [48][49].
+
+Ruling: rather than assert the agent's behaviour, **mechanise the rule**. `bin/speckit-resume` now
+computes the resume point from the ledger, which supplies an oracle for the rule and lets the
+behaviour be asserted metamorphically. `self-gate.sh` §1i: 8 oracle cases + monotone progress + no
+double completion across a targeted interrupt. **T021 closed.**
+
+For T033, the twelve scenarios split: 8 are deterministic and already gated; 2 (S4, S8) have an
+observable oracle and are now automated in `evals/run-scenario-evals.py`, run in the gate against a
+scripted agent with a negative control (§1j); **S9 has no observable oracle** (prompt behaviour, no
+file effect) and stays live-only — stated in `quickstart.md` rather than implied. **T033 stays open**
+for the live pass, which spends model calls and therefore needs approval.
+
+Evidence: `./scripts/self-gate.sh` → §1i (4 ok) and §1j (2 ok); full gate PASS.
+
 ## T032 (2026-10-18) — CI was red for pre-existing reasons; fixed
 
 Validating T032 against CI (`gh run list`) showed the gate has been **red since at least `fa4e345`

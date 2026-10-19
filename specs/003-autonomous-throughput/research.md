@@ -281,3 +281,12 @@ fork in `plan.md`.
 [42] (2023). *An innovative two-stage algorithm to optimize Firewall rule ordering.* doi:10.1016/j.cose.2023.103423
 [43] (2011). *Network-Level Access Control Policy Analysis and Transformation.* doi:10.1109/tnet.2011.2178431
 [44] (2025). *Deny-monotone composition of hierarchical access control policies in distributed systems.* doi:10.21203/rs.3.rs-8290081/v1
+[45] (2014). *The Oracle Problem in Software Testing: A Survey.* doi:10.1109/tse.2014.2372785
+[46] (2010). *Metamorphic Testing: A Simple Approach to Alleviate the Oracle Problem.* doi:10.1109/sose.2010.31
+[47] (2010). *Metamorphic Testing Techniques to Detect Defects in Applications without Test Oracles.* doi:10.7916/d81261jw
+[48] (2021). *FIRestarter: Practical Software Crash Recovery with Targeted Library-level Fault Injection.* doi:10.1109/dsn48987.2021.00048
+[49] (2025). *A Survey on Failure Analysis and Fault Injection in AI Systems.* doi:10.1145/3732777
+[50] (2023). *Exhaustive property oriented model-based testing with symbolic finite state machines.* doi:10.1016/j.scico.2023.005
+[51] Temporal. *Long-Running Activity — Heartbeats* ("Test resumption"). https://docs.temporal.io/design-patterns/long-running-activity
+[52] Flowproof. *Agent testing* ("the model's decisions are RECORDED, not mocked"). https://automators.ai/flowproof/docs/agent-testing
+[53] duskel/cassette — *Deterministic record/replay for LLM and tool calls.* https://github.com/duskel/cassette

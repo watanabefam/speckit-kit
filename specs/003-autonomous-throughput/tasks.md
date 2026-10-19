@@ -128,7 +128,7 @@ budget and leaves the failing task unticked; a resumed run repeats nothing.
 
 - [x] T020 [P] [US3] Gate: extend the `expected` rule-marker dict and the §5 `check_cmd` calls for the
       new implement markers (`scripts/self-gate.sh` §3b, §5)
-- [ ] T021 [P] [US3] Property **P-005**: ledger-resume fixture test — interrupt mid-run, resume,
+- [x] T021 [P] [US3] Property **P-005**: ledger-resume fixture test — interrupt mid-run, resume,
       assert no completed task repeats
 
 ### Implementation for User Story 3
@@ -172,7 +172,7 @@ stops and promotes.
 - [x] T031 [P] Update `README.md` component/command tables and layout (the count "prepend on 5
       commands" is now stale)
 - [x] T032 Run the full self-gate e2e on macOS (bash 3.2) and Linux (bash 5) — FR-014, SC-005
-- [ ] T033 Run `quickstart.md` scenarios S1–S12 and record the evidence
+- [ ] T033 Run `quickstart.md` scenarios S1–S12 and record the evidence — **8 gated, S4/S8 automated (`run-scenario-evals.py`, fake-verified), S9 live-only**; the live pass is the remaining step
 - [x] T034 Fill the Task column in `spec.md` Requirement Traceability; reconcile `plan.md` if the
       design shifted during implementation
 - [x] T035 Record SC-001/SC-003 evidence: count the human interactions used to implement 003 itself,

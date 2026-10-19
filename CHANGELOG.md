@@ -7,6 +7,23 @@ The preset version lives in `preset/preset.yml` and is what `specify preset info
 
 ## [Unreleased]
 
+### Added — the resume rule is mechanical, and the judgement scenarios have a harness
+
+- **`bin/speckit-resume`** computes the resume point from the ledger (`tasks.md` + `progress.md`) and
+  prints `RESUME T0xx` or `COMPLETE`. The implement step now points at it, so a resumed run computes
+  where to continue instead of reconstructing it from the conversation. Making the rule mechanical is
+  what gives it a test: `self-gate.sh` §1i asserts it with an **oracle** (eight cases — a gap, a fix
+  round, a tick with no ledger line) and with **metamorphic relations** across a targeted interrupt —
+  progress is monotone, and no task completes twice.
+- **`evals/run-scenario-evals.py`** automates the judgement scenarios from `quickstart.md` that have
+  an observable oracle: S4 (the boundary refuses) and S8 (the fast lane). It asserts what is
+  observable — which files were or were not created, whether a refusal was printed — never the
+  model's internal choices. `self-gate.sh` §1j runs it against a **scripted agent**, including a
+  negative control proving the assertions can fail; the live pass is a deliberate separate run
+  because it spends model calls. **S9 (the budget halt) stays live-only** — it is prompt behaviour
+  with no observable file effect, and `quickstart.md` now says so rather than implying coverage it
+  does not have.
+
 ### Added — a template section the constitution lacks is reported as a DECISION, not drift
 
 This is the door a real project came through. The preset appended a **Delivery Principles** section

@@ -140,3 +140,22 @@ git -C /tmp/003-demo status --short
 **Expected:** the Commands block, `scripts/verify`, the autonomy contract, and the quick command are
 removed; a project the user brought their own content to is left clean. `opencode.json` edits are
 reversed only where the kit created the file.
+
+---
+
+## Where each scenario is checked
+
+Eight of these are deterministic (files, exit codes, markers) and run in the kit's own gate on every
+push. Two need a real agent; `evals/run-scenario-evals.py` automates them against a scripted agent in
+CI and against a live one on demand.
+
+| Scenario | Checked by |
+| --- | --- |
+| S1, S2, S3, S6, S7, S10, S11, S12 | `scripts/self-gate.sh` §5 — init, idempotence, no-clobber, verify, unresolved, drift, the gate itself |
+| S4, S5 — the boundary refuses | `self-gate.sh` §1d3 and §1f assert it **mechanically**; `run-scenario-evals.py` asserts the agent's response to it |
+| S8 — the fast lane | `evals/run-scenario-evals.py` (no spec/plan/tasks; one `quick-log.md` entry) |
+| S9 — the budget halt | **live only.** The halt is prompt behaviour with no observable file effect, so there is no oracle to assert against — the honest limit of the split |
+
+The rule behind S9's ledger resume *is* asserted mechanically: `bin/speckit-resume` computes the
+resume point, and `self-gate.sh` §1i tests it with an oracle plus metamorphic relations (monotone
+progress, no double completion) across a targeted interrupt.

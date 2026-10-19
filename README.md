@@ -21,6 +21,7 @@ using Spec Kit's own extension points rather than forking it.
 | `permissions/opencode-permission.jsonc` | opencode config | The **mechanical boundary**: `deny` force-push / publish / destructive DB, `ask` on push, reset, clean. Installed into the project's `opencode.json` (never clobbering one that exists) |
 | `commands/speckit.quick.md` | Installer-copied command | The fast lane for small work — a preset cannot create a command, so the installer copies it |
 | `bin/speckit-init` | Installer | One command to set a project up |
+| `bin/speckit-resume` | Kit tool | Computes the resume point from the ledger, so the resume rule is asserted, not interpreted |
 | `evals/` | Skill evaluations | Behaviour evals + **trigger-accuracy evals** (the failure mode that's silent) |
 | `scripts/self-gate.sh` + `.github/workflows/` | CI | The kit gates itself on every push, on Linux **and** macOS bash 3.2 |
 
@@ -284,11 +285,12 @@ commands/speckit.quick.md         the fast lane (installer-copied; no spec/plan/
 permissions/opencode-permission.jsonc  the mechanical boundary, merged into the project opencode.json
 bin/speckit-init                  installer (idempotent; uses `preset update`)
 bin/speckit-uninit                reverse it (preserves your own content)
+bin/speckit-resume                compute the resume point from the ledger (the rule, made mechanical)
 preset/                           spec-kit preset (append ×4, prepend ×5)
 skill/spec-driven-development/    agent skill + references
 global/working-agreements.md      global routing rules
 global/autonomy-contract.md       the four-bucket handoff (installed to .opencode/)
-evals/                            behaviour + trigger evals, two runners, hang regression test
+evals/                            behaviour + trigger evals, a scenario harness, hang regression test
 scripts/self-gate.sh              the kit's own gate
 .github/workflows/self-gate.yml   runs that gate on Linux and macOS
 CHANGELOG.md                      version history

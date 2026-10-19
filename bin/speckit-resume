@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# speckit-resume — print the task an interrupted implement run should resume at.
+#
+# WHY THIS EXISTS
+#
+# The implement rule says "resume at the first task without a `complete` ledger line".
+# That is an algorithm, but it was prose the agent had to interpret, and the only way to
+# test it was to watch a live run. Made mechanical, it has an oracle (this script) and a
+# property that can be asserted in the gate — the same move the kit makes everywhere else:
+# a rule that can be computed should be computed, not interpreted.
+#
+# The ledger is authoritative, not the checkbox. A ticked task with no `Task <n>: complete`
+# line is NOT done — completion claims are not evidence. Reading the ledger rather than the
+# conversation is what makes a run resumable after compaction.
+#
+# Usage:  speckit-resume <spec-dir>
+# Output: "RESUME T003"  |  "COMPLETE"
+# Exit:   0 normally, 2 if tasks.md is missing
+set -euo pipefail
+
+SPEC="${1:-}"
+if [ -z "$SPEC" ]; then
+  echo "usage: speckit-resume <spec-dir>" >&2
+  exit 2
+fi
+TASKS="$SPEC/tasks.md"
+LEDGER="$SPEC/progress.md"
+if [ ! -f "$TASKS" ]; then
+  echo "no tasks.md in $SPEC" >&2
+  exit 2
+fi
+
+python3 - "$TASKS" "$LEDGER" <<'PY'
+import os, re, sys
+
+tasks_path, ledger_path = sys.argv[1], sys.argv[2]
+
+# Task order comes from tasks.md; ids are matched numerically so `T003` and `Task 3`
+# are the same task.
+tasks = []
+for line in open(tasks_path, encoding="utf-8"):
+    m = re.match(r"\s*- \[[ xX]\] (T(\d+))\b", line)
+    if m:
+        tasks.append((int(m.group(2)), m.group(1)))
+
+# Completion comes from the ledger, and only from a `complete` line. A `fix round n/m`
+# line is explicitly not completion.
+done = set()
+if os.path.exists(ledger_path):
+    for line in open(ledger_path, encoding="utf-8"):
+        m = re.match(r"\s*Task (\d+): complete\b", line)
+        if m:
+            done.add(int(m.group(1)))
+
+for num, tid in tasks:
+    if num not in done:
+        print(f"RESUME {tid}")
+        sys.exit(0)
+print("COMPLETE")
+PY

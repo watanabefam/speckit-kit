@@ -95,6 +95,16 @@ API consumers are 0-based, dates shift by one
 first task without a `complete` line, and re-verify the named commits with `git log` before
 trusting them.
 
+**Do not reconstruct the resume point by hand — compute it:**
+
+```
+speckit-resume <spec-dir>
+```
+
+It reads `tasks.md` and `progress.md` and prints `RESUME T0xx` or `COMPLETE`. The rule is
+mechanical so that it cannot drift with interpretation: the ledger is authoritative, not the
+checkbox, and a task ticked without a `complete` line is not done.
+
 ### If reality contradicts the plan
 
 Stop. Explain the contradiction, identify the **earliest** affected artifact (spec before plan,

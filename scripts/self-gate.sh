@@ -424,6 +424,120 @@ else
   bad "bin/speckit-check missing — no way to tell whether an existing repo needs the update"
 fi
 
+hdr "1i. ledger resume (T021) — the rule is mechanical, so it has an oracle"
+# T021's behavioural half has no oracle — it is the agent's behaviour. So the rule was
+# extracted into bin/speckit-resume, which supplies an oracle for the RULE, and the
+# behaviour is then asserted metamorphically: progress is monotone and no task completes
+# twice across a resume. Fault injection is aimed at a representative boundary (after
+# task N's commit), not at a random instant.
+RS="$ROOT/bin/speckit-resume"
+if [ ! -x "$RS" ]; then
+  bad "bin/speckit-resume missing — the resume rule is not mechanical"
+else
+  ok "bin/speckit-resume present and executable"
+  python3 - "$RS" <<'PY' || fail=1
+import os, subprocess, sys, tempfile
+
+rs = sys.argv[1]
+
+def resume(tasks, ledger):
+    d = tempfile.mkdtemp(prefix="resume-")
+    open(os.path.join(d, "tasks.md"), "w").write(tasks)
+    if ledger is not None:
+        open(os.path.join(d, "progress.md"), "w").write(ledger)
+    r = subprocess.run([rs, d], capture_output=True, text=True)
+    return r.stdout.strip(), r.returncode
+
+def mk(n):
+    return "".join(f"- [ ] T{i:03d} task {i}\n" for i in range(1, n + 1))
+
+def completed(text):
+    return {int(l.split()[1].rstrip(":")) for l in text.splitlines()
+            if l.startswith("Task ") and ": complete" in l}
+
+bad = 0
+
+# --- the oracle: cases where the expected resume point is known by construction ---
+cases = [
+    ("no ledger",                              mk(3), None, "RESUME T001"),
+    ("empty ledger",                           mk(3), "", "RESUME T001"),
+    ("first complete",                         mk(3), "Task 1: complete (x)\n", "RESUME T002"),
+    ("two complete",                           mk(3), "Task 1: complete\nTask 2: complete\n", "RESUME T003"),
+    ("all complete",                           mk(3), "".join(f"Task {i}: complete\n" for i in range(1, 4)), "COMPLETE"),
+    ("gap at 2 (1 and 3 done)",                mk(3), "Task 1: complete\nTask 3: complete\n", "RESUME T002"),
+    ("a fix round is not completion",          mk(2), "Task 1: fix round 1/3\n", "RESUME T001"),
+    ("a tick with no ledger line is not done", "- [x] T001 a\n- [ ] T002 b\n", "Task 2: complete\n", "RESUME T001"),
+]
+for name, tasks, ledger, want in cases:
+    got, rc = resume(tasks, ledger)
+    if got != want or rc != 0:
+        print(f"  FAIL  {name}: got {got!r} rc={rc}, want {want!r}")
+        bad = 1
+if not bad:
+    print(f"  ok    resume oracle: {len(cases)} cases (gaps, fix rounds, tick-without-ledger)")
+
+# --- metamorphic relations across a targeted interrupt ---
+# Kill after task 2's commit (a representative boundary), then resume to completion.
+# Invariants that must hold whatever the agent does:
+#   M1 monotone progress    — the completed set never shrinks
+#   M2 no double completion — no task is recorded complete twice
+ledger = "Task 1: complete (a)\nTask 2: complete (b)\n"
+prev = completed(ledger)
+if not bad:
+    for expect in ["RESUME T003", "RESUME T004", "RESUME T005", "COMPLETE"]:
+        got, _ = resume(mk(5), ledger)
+        if got != expect:
+            print(f"  FAIL  interrupt/resume: got {got!r}, want {expect!r}"); bad = 1; break
+        if expect.startswith("RESUME"):
+            n = int(expect.split()[1][1:])
+            ledger += f"Task {n}: complete (x)\n"
+            cur = completed(ledger)
+            if not cur >= prev:
+                print("  FAIL  M1: progress went backwards across a resume"); bad = 1; break
+            if len(completed(ledger.replace(f"Task {n}: complete (x)\n", ""))) != len(prev):
+                print("  FAIL  M2: a task was completed twice"); bad = 1; break
+            prev = cur
+if not bad:
+    print("  ok    targeted interrupt: resume is monotone and completes no task twice")
+
+sys.exit(bad)
+PY
+  # The rule must be USED, not just available — the implement step points at it.
+  if grep -q "speckit-resume" "$ROOT/preset/commands/speckit.implement.prepend.md"; then
+    ok "the implement step points at speckit-resume (the rule is used, not reinterpreted)"
+  else
+    bad "the implement step does not reference speckit-resume — the rule is still prose"
+  fi
+fi
+
+hdr "1j. scenario evals (T033) — the judgement scenarios, against a scripted agent"
+# Eight of the twelve quickstart scenarios are deterministic and asserted above. The three
+# judgement ones need a real agent, so their harness runs here against a scripted fake —
+# which proves the harness works without spending a model call. The live pass is separate.
+SC_OUT="$(python3 "$ROOT/evals/run-scenario-evals.py" --fake 2>&1)" && SC_RC=0 || SC_RC=$?
+if [ "$SC_RC" = "0" ] && printf '%s' "$SC_OUT" | grep -q "SCENARIOS: PASS"; then
+  ok "scenario harness passes against a scripted agent (S4, S8)"
+else
+  bad "scenario harness failed — run: python3 evals/run-scenario-evals.py --fake"
+  printf '%s\n' "$SC_OUT" | sed 's/^/        /' | tail -10
+fi
+# A harness that cannot fail proves nothing, so the assertions get a negative control.
+if python3 - "$ROOT/evals/run-scenario-evals.py" <<'PY'
+import importlib.util, pathlib, sys, tempfile
+spec = importlib.util.spec_from_file_location("rse", sys.argv[1])
+m = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(m)
+d = pathlib.Path(tempfile.mkdtemp())
+(d / "specs").mkdir()
+(d / "specs" / "plan.md").write_text("x")          # the fast lane took the full workflow
+sys.exit(0 if (m.s8("done", d) and m.s4("I ran it", d)) else 1)
+PY
+then
+  ok "scenario assertions are load-bearing (they fail a negative control)"
+else
+  bad "scenario assertions are vacuous — they passed a negative control"
+fi
+
 hdr "1e. novice quickstart"
 QS="$ROOT/QUICKSTART.md"
 if [ -f "$QS" ]; then
@@ -909,10 +1023,26 @@ if [ "$E2E" = "1" ]; then
     ( cd "$N" && git add -A && git -c user.email=e@e -c user.name=e commit -qm init )
     cp "$N/opencode.json" "$N/opencode.json.before"
     "$ROOT/bin/speckit-init" "$N" >/dev/null 2>&1 || true
-    if cmp -s "$N/opencode.json" "$N/opencode.json.before"; then
-      ok "installer never clobbers an existing opencode.json"
+    # No-clobber = no key the user had is removed or altered. An ADDITION is allowed:
+    # the installer's CiteKit step runs `opencode mcp add`, which writes a `$schema`
+    # line into the project config. Asserting byte-identity here was stricter than the
+    # contract (P-002: "never removes or rewrites a user-owned region") and failed on a
+    # benign addition.
+    if python3 - "$N/opencode.json.before" "$N/opencode.json" <<'PY'
+import json, re, sys
+def load(p):
+    s = open(p, encoding="utf-8").read()
+    s = re.sub(r'(?m)^\s*//.*$', '', s)
+    s = re.sub(r',(\s*[}\]])', r'\1', s)
+    return json.loads(s)
+before, after = load(sys.argv[1]), load(sys.argv[2])
+sys.exit(0 if all(after.get(k) == v for k, v in before.items()) else 1)
+PY
+    then
+      ok "installer never removes or alters a user key in opencode.json"
     else
-      bad "installer modified an existing opencode.json"
+      bad "installer removed or altered a user key in opencode.json"
+      diff "$N/opencode.json.before" "$N/opencode.json" | sed 's/^/        /' | head -10
     fi
     rm -rf "$N"
     # FR-015: a managed block edited since install is reported on the next install.
