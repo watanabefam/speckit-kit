@@ -1119,6 +1119,11 @@ hdr "3d. section integrity — the conformance check for 3b"
 SIC="$ROOT/scripts/check-section-integrity.sh"
 if [ ! -f "$SIC" ]; then
   bad "scripts/check-section-integrity.sh is missing — the section-integrity rule is prose-only again"
+elif ! python3 -c "import yaml" >/dev/null 2>&1; then
+  # The fixture resolves the template through .specify/scripts/bash/resolve-template.sh,
+  # which needs PyYAML. GitHub's macOS runner python3 does not ship it, so this section
+  # went red there for a reason unrelated to the check itself. Skip with the reason.
+  printf '  skip  PyYAML not available — the fixture needs it to resolve the template\n'
 else
   SICD="$(mktemp -d)"
   if bash "$ROOT/.specify/scripts/bash/resolve-template.sh" spec-template > "$SICD/ok.md" 2>"$SICD/err" \
