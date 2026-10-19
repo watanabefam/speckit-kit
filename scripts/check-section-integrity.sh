@@ -65,8 +65,19 @@ while IFS= read -r want; do
     printf '  MISSING  %s\n' "$want"
     missing=$((missing + 1))
   elif [ "$at" -le "$cursor" ]; then
-    printf '  ORDER    %s  (found before an earlier-required section)\n' "$want"
-    disordered=$((disordered + 1))
+    # Some sections are INSTRUCTED to move. The commands require `Document Status` directly after
+    # the core metadata, and `Normative Status` / `Which document wins` / `Requirements Syntax
+    # (EARS)` follow it — all ahead of where append-only composition puts them. Penalising the
+    # reordering the kit itself mandates would make this check report failure on every conformant
+    # spec, and a check that is wrong about something normal gets removed. Presence is still
+    # required; only ORDER is waived for these four.
+    case "$want" in
+      "## Document Status"|"## Normative Status"|"### Which document wins"|"## Requirements Syntax (EARS)")
+        : ;;   # ordering waived by instruction; presence already verified above
+      *)
+        printf '  ORDER    %s  (found before an earlier-required section)\n' "$want"
+        disordered=$((disordered + 1)) ;;
+    esac
   else
     cursor=$at
   fi
