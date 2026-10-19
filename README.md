@@ -316,3 +316,20 @@ nothing for every Mac user.
 
 See `evals/README.md` for the runners and how to record results.
 
+### Checking it actually works — the scenario pass
+
+`scripts/self-gate.sh` asserts the **deterministic** half on every push. Three judgement scenarios
+from `specs/003-autonomous-throughput/quickstart.md` need a real agent, so they live in
+`evals/run-scenario-evals.py` and run on demand:
+
+```sh
+python3 evals/run-scenario-evals.py          # live: the boundary, the fast lane, the budget halt
+python3 evals/run-scenario-evals.py --fake   # scripted agent, no model — what the gate runs
+```
+
+The live pass **spends model calls**, so it is deliberately not in CI (that would need an API key in
+the runner). It asserts what is **observable** — a file that must still exist, artifacts that must not
+have been created, a run that must end — and never the model's own words, because a self-report is
+weakest exactly where these scenarios live. `--fake` is the same harness against a scripted agent,
+which is what `self-gate.sh` §1j runs on every push, with a negative control per scenario.
+

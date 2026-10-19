@@ -93,3 +93,17 @@ rework, because disagreements get caught in a document instead of in production.
 
 For small, well-understood changes `/speckit` deliberately skips most of this. Over-process is a
 failure mode here too.
+
+## Checking it actually works
+
+The kit gates itself on every push, but three things need a real agent and so cannot run in CI. They
+are one command, on demand:
+
+```sh
+python3 evals/run-scenario-evals.py
+```
+
+It checks that the permission boundary holds, that `/speckit.quick` leaves no spec/plan/tasks behind,
+and that an impossible task makes the run **stop** instead of claiming success. It **spends model
+calls**, which is why it is not automatic. Add `--fake` to run the same checks against a scripted
+agent with no model at all — that is what CI does.
