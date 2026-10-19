@@ -333,7 +333,11 @@ if [ -x "$CK" ]; then
   ok "bin/speckit-check present and executable"
   # It must be READ-ONLY — it reports, it does not repair. A checker that writes is
   # a checker nobody runs against a repo they care about.
-  if grep -qE "speckit-init\\\\?\"|rm -rf|cp -" "$CK"; then
+  #
+  # Comment lines are stripped before matching, because a comment cannot mutate anything. This
+  # check once failed on a comment that merely NAMED the forbidden tokens while explaining why
+  # they were avoided — a false positive that punishes documenting the rule. Match code only.
+  if grep -v '^[[:space:]]*#' "$CK" | grep -qE "speckit-init\\?\"|rm -rf|cp -"; then
     bad "speckit-check appears to mutate — it must only report"
   else
     ok "speckit-check is read-only (no writes, only advises running speckit-init)"
@@ -362,10 +366,16 @@ if [ -x "$CK" ]; then
   touch "$TD/README.md"; git -C "$TD" add -A
   git -C "$TD" -c user.email=e@e -c user.name=e commit -qm init
   "$ROOT/bin/speckit-init" "$TD" >/dev/null 2>&1 || true
-  if bash "$CK" "$TD" >/dev/null 2>&1; then
-    ok "speckit-check reports a freshly-installed repo as current"
+  # A fresh install may legitimately return 3 (a governance DECISION: its constitution can lag
+  # the template's appended sections). It must NEVER return 1 (drift) or 2. Capture the code and
+  # the output, so a failure says WHICH property broke — the lesson from the changelog where
+  # discarding the failing test's output made a CI failure undiagnosable.
+  _rc=0; _ckout="$(bash "$CK" "$TD" 2>&1)" || _rc=$?
+  if [ "$_rc" = "0" ] || [ "$_rc" = "3" ]; then
+    ok "speckit-check reports a freshly-installed repo as current or decision-needed (exit $_rc)"
   else
-    bad "freshly-installed repo reported as drifting — detection or install is broken"
+    bad "freshly-installed repo reported as drifting (exit $_rc) — detection or install is broken"
+    printf '%s\n' "$_ckout" | tail -8 | sed 's/^/        /'
   fi
   # now make it stale on purpose — TWO ways, because the checker once handled
   # version drift but was INVERTED on content drift (a `pipefail` bug it survived

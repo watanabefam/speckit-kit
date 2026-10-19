@@ -7,6 +7,38 @@ The preset version lives in `preset/preset.yml` and is what `specify preset info
 
 ## [Unreleased]
 
+### Added — a template section the constitution lacks is reported as a DECISION, not drift
+
+This is the door a real project came through. The preset appended a **Delivery Principles** section
+to `constitution-template`; `speckit-init` applied the template change; the project's live
+constitution silently disagreed with its own resolved template; and `speckit-check` reported "needs
+the updated kit". That remedy is **wrong**: running the installer cannot fix it, and must not try,
+because adopting the section amends a governance artifact — it needs approval, a version bump and a
+decision record.
+
+- **`bin/speckit-check` — check 6.** Compares the constitution's headings against the resolved
+  `constitution-template`'s required headings (placeholder and `[REMOVE IF USED]` markers excluded).
+  Missing sections are reported as `DECIDE`, with the explicit statement that adopting them is an
+  amendment, not an upgrade. New exit code **3** = no drift, decision needed. Drift still exits 1
+  and takes precedence, so nothing that was previously actionable is reclassified as merely a
+  decision.
+- Written with **no temp files**, because the checker must stay read-only.
+
+### Fixed — the read-only heuristic flagged the comment that documented the rule
+
+`self-gate` §1g greps `speckit-check` for mutating tokens; the check failed on a *comment* that
+merely **named** the forbidden tokens while explaining why they were avoided. A comment cannot
+mutate anything, so comment lines are now stripped before matching. The false positive punished
+documenting the rule, which is the wrong incentive.
+
+### Fixed — §1g assumed a fresh install must return 0
+
+A fresh install now legitimately returns **3**, because `specify init` scaffolds the constitution
+from the **core** template rather than the composed one, so the appended sections are correctly
+absent until the project amends it. §1g now accepts 0 or 3 and rejects 1 or 2, and it captures the
+output on failure so a future break says *which* property failed — the lesson recorded in this file
+after a CI failure that could not identify its own cause.
+
 ### Added — CiteKit's MCP server is registered on install, if CiteKit is present
 
 The evidence-search discipline's point is that an answer resting on outside sources is checkable.
