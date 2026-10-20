@@ -7,6 +7,26 @@ The preset version lives in `preset/preset.yml` and is what `specify preset info
 
 ## [Unreleased]
 
+### Fixed — a skipped section could read as a passing one
+
+The gate printed `SELF-GATE: PASS` whether every section had run or some had been skipped. A skip
+and a pass were indistinguishable in the verdict, so a build that silently did less work looked
+identical to one that did all of it. The flaky-test literature is blunt about this: a check that did
+not run provides no signal, and reporting it as a pass converts a missing capability into a green
+build.
+
+- **Skips are counted and named.** A `skip()` helper replaces the raw `printf` calls, and the final
+  verdict reads `SELF-GATE: PASS -- but N section(s) were SKIPPED, and a skip is not a pass`. The
+  skipped sections are still listed inline. The build still exits 0 — the point is that it can no
+  longer be *misread*, not that an optional integration should fail an install.
+- **CI installs the dependency instead of skipping.** The template resolver needs PyYAML and
+  GitHub's macOS runner ships a system python3 without it, so the section-integrity fixture was
+  skipping there — meaning CI had never actually exercised the check. The workflow now installs
+  PyYAML on both runners. The skip remains as a fallback for an adopter's machine.
+- **The same dependency quietly affected `speckit-check`**, whose new conformance check resolves the
+  template too; it already degraded to a reported skip rather than a silent pass, and the CI fix
+  removes the common case.
+
 ### Added — the resume rule is mechanical, and the judgement scenarios have a harness
 
 - **`bin/speckit-resume`** computes the resume point from the ledger (`tasks.md` + `progress.md`) and
