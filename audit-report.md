@@ -1,11 +1,11 @@
 # 📋 Audit Report: speckit-kit
 
-Date: 2026-10-21 (final re-audit after fixes)
-Audited by: `audit-project` skill (read-only audit; only this file was written)
+Date: 2026-10-21 (fresh pass after commit cb56ab4)
+Audited by: `audit-project` skill
 
 ## Overall Score: 97.2/100 — 🟢 Excellent
 
-| Category | Initial | Final | Weight | Weighted |
+| Category | Initial | Now | Weight | Weighted |
 |---|---|---|---|---|
 | Structural compliance (Phase 2) | 37/100 | 95/100 | 20% | 19.0 |
 | Template consistency (Phase 3) | 100/100 | 100/100 | 20% | 20.0 |
@@ -15,118 +15,115 @@ Audited by: `audit-project` skill (read-only audit; only this file was written)
 | Security scan (Phase 8) | 95/100 | 100/100 | 10% | 10.0 |
 | **Total** | **83.9** | **97.2** | | **97.2** |
 
-**Verdict: 🟢 PASS — 0 failures, 2 warnings (both accepted with reasons), 0 open decisions.**
+**Verdict: 🟢 PASS — 0 failures. 2 accepted deviations, 3 observations. Nothing actionable left
+that can be fixed without harming the product.**
 
-### Verification evidence
+### Verification evidence (all run, not inferred)
 
 | Check | Command | Result |
 |---|---|---|
-| Recorded project verification | `./scripts/verify` | **EXIT=0, `SELF-GATE: PASS`** |
-| Spec Kit install health | `speckit-check .` | **`constitution conforms` → `current, nothing to do`** |
+| Recorded verification | `./scripts/verify` | **EXIT=0, `SELF-GATE: PASS`**, 0 FAIL lines |
+| Spec Kit install | `speckit-check .` | **`constitution conforms` → `current, nothing to do`** |
 | Command-guard probes | 8 command strings | **8/8 correct** |
-| Path-guard probes | 12 payloads against the real hook body | **12/12 correct** |
-| Guard fail-open regression | protected path, env var absent | **exit 2 (blocked)** — was exit 1 (crashed open) |
-| Hook source ↔ installed | `diff -q` | IDENTICAL |
+| Path-guard probes | 12 payloads on the real hook body | **12/12 correct** |
+| Fail-open regression | protected path, env var absent | **exit 2** (was exit 1 — crashed open) |
+| Source ↔ installed pairs | 5 `diff -q` comparisons | **5/5 identical** |
+| Markdown relative links | 9 links scanned | **0 broken** |
+| Placeholder scan | `TODO(`/`FIXME`/`TBD`/`[ALL_CAPS_` | **0 real** (all instructional text) |
+| Tracked OS noise | `git ls-files` | **none** |
 
 ---
 
-## Defects found and fixed
+## This pass: one new defect found and fixed
 
-### 1. Command guard bypass — `env` prefix (HIGH)
+**Stale eval fixture** — `evals/trigger-evals.json:100` (case `snt-07`) told the model to read
+`specs/001-faq-block/spec.md`, a path that has never existed in this repo. A trigger eval asks
+"should the skill activate on this prompt?", and a prompt referencing a missing file can change the
+answer for the wrong reason — the model may react to the dead path rather than to the intent.
 
-The token walk started checking only after the first `git`, so anything before it was invisible.
-`env core.hooksPath=/dev/null git commit -m x` → allowed.
-
-**Fix:** two passes — does any `git` token exist, then check every token in any position.
-
-### 2. Path guard failed OPEN on every write (HIGH)
-
-Found while answering "how do you check paths?". The guard ran under `set -u` and referenced
-`$OPENCODE_PROJECT_DIR`. The plugin exports **only `OPENCODE_CONFIG_CONTENT`** — not
-`OPENCODE_PROJECT_DIR` (verified by grepping `node_modules`). So the line aborted with **exit 1**,
-and the harness blocks only on **exit 2**. Result: the generated-file protection protected nothing,
-silently, in every real session.
-
-**Fix:** `project_dir="${OPENCODE_PROJECT_DIR:-}"`, and the absolute-prefix strip is skipped when
-unset. An absent variable now means "nothing to strip", never "crash". A guard must fail closed.
-
-### 3. Path guard ignored multiedit payloads (MEDIUM)
-
-The jq collected `.changes[]?.path` at the payload root, but this plugin nests tool args under
-`.tool_args` (the bash guard reads `.tool_args.command`). A multiedit aimed at a generated file was
-allowed.
-
-**Fix:** paths are read from `.tool_args.filePath`, `.tool_args.file_path`, `.tool_args.path`,
-`.tool_args.changes[]`, `.tool_args.files[]`, and the root equivalents.
-
-### 4. Two shipped tools not installed (LOW)
-
-`speckit-mcp`, `speckit-resume` symlinked into `~/.local/bin`. All five entry points resolve.
-
-### 5. SKILL.md structure (LOW)
-
-`allowed-tools` added; the loop numbered `Step 1..6`; `## Where to go next` added; version 1.1.1.
-
-### 6. `.ignore` missing (LOW)
-
-Added: `.git/`, `node_modules/`, `.opencode/node_modules/`, `__pycache__/`, `*.pyc`, `.DS_Store`.
-
-### 7. Constitution was an unfilled scaffold (GOVERNANCE)
-
-`.specify/memory/constitution.md` still held the raw template — every principle a bracketed
-placeholder. Ratified at **1.0.0** with five core principles derived from practices the repo already
-enforces, plus the preset's eight Delivery Principles. Reasoning recorded in
-`decisions/0001-ratify-the-constitution.md`.
-
-`speckit-check` before: *"the resolved template requires 9 section(s) this constitution lacks."*
-After: *"ok constitution conforms to the resolved template."*
+Repointed to `specs/003-autonomous-throughput/spec.md`, which exists. JSON re-validated; the
+already-committed specs list confirmed.
 
 ---
 
-## How the path guard is checked
+## Earlier fixes (all still green)
 
-The harness in `audit-project` reports path guards as UNVERIFIED because its corpus drives shell
-commands, not paths. They are checked the same way the plugin drives them, by hand:
-
-1. Extract the real `bash:` action body from `hooks/speckit-hooks.yaml`.
-2. Send it a JSON payload on stdin, exactly as the plugin does:
-   `{"tool_name":"write","tool_args":{"filePath":"<target>"}}`.
-3. Read the exit code: **2 = blocked**, **0 = allowed**, anything else = the guard is broken.
-4. Test both classes — protected paths must block, permitted paths must stay writable — and test
-   with the environment variable **absent**, because that is how it really runs.
-
-A run that only checks "protected path blocks" would have passed this guard while it was failing
-open. The absent-variable case is the one that finds the bug.
+1. **Command guard bypass** — the token walk only inspected tokens after the first `git`, so
+   `env core.hooksPath=/dev/null git commit` escaped. Now two passes.
+2. **Path guard failed open** — ran under `set -u` reading `$OPENCODE_PROJECT_DIR`, which the plugin
+   never exports (only `OPENCODE_CONFIG_CONTENT`). Aborted with exit 1, and only exit 2 blocks, so
+   the whole generated-file guard protected nothing. Now defaults the variable.
+3. **Path guard ignored multiedit shapes** — paths were read from the payload root while this plugin
+   nests args under `tool_args`. Now reads both.
+4. **Two tools not installed** — `speckit-mcp`, `speckit-resume` symlinked; all five resolve.
+5. **SKILL.md** — `allowed-tools` added, loop numbered `Step 1..6`, `## Where to go next` added.
+6. **`.ignore`** — added.
+7. **Constitution** — was still the raw scaffold with every principle a placeholder. Ratified at
+   1.0.0; reasoning in `decisions/0001-ratify-the-constitution.md`.
 
 ---
 
-## Remaining items (both accepted, not defects)
+## Observations (checked, not defects, deliberately not "fixed")
 
-1. 🟡 **[WARN] `model:` absent from SKILL.md frontmatter.** Deliberate — the kit is
-   model-agnostic, and pinning one would make the distributable skill worse for adopters.
+**A. Historical spec artifacts predate the current template.**
+`scripts/check-section-integrity.sh` against the resolved templates:
 
-2. 🟡 **[WARN] Two addenda exceed the 200-line reference budget** — `plan-addendum.md` (258),
-   `spec-addendum.md` (225). Parked deliberately: these are composed *into* users' `plan.md` and
-   `spec.md`, so a table of contents inside them would be injected into every generated artifact.
-   The rubric targets documents a reader navigates, not fragments that get composed. A genuine fix
-   means restructuring them, which is a preset change requiring a version bump.
+| Artifact | Result |
+|---|---|
+| `003/spec.md` | 2 missing headings — both already covered in prose |
+| `003/plan.md` | **conformant** |
+| `003/tasks.md` | 3 missing headings |
+| `001/spec.md`, `001/plan.md`, `001/tasks.md` | written 2026-10-04, before several template additions |
+| `002/spec.md`, `002/plan.md`, `002/tasks.md` | written 2026-10-17 |
 
-3. ℹ️ **Documented deviation:** `argument-hint` and `user-invocable` are intentionally absent.
-   `scripts/self-gate.sh:633` rejects them as non-portable (opencode silently ignores them; Claude
-   Code packaging rejects them). The audit rubric and the project's enforced gate disagree; the gate
-   wins. `allowed-tools` is accepted by both and is present.
+Two reasons this is not a fix:
+- The checker compares **exact heading strings**. `003/spec.md` has `### Key Entities`; the template
+  says `### Key Entities *(include if feature involves data)*`. The content is present — only the
+  instructional parenthetical differs, which is meant to be dropped when filling in.
+- `003/spec.md` covers "which document wins" in prose under `## Normative Status` ("where the two
+  disagree, this spec prevails"). The substance exists; the sub-heading does not.
 
-4. ℹ️ **Untracked paths:** `.ignore`, `audit-report.md`, `decisions/`, `blog/`.
+For 001 and 002 the drift is real but historical: they were authored against earlier template
+versions, they record completed features, and retrofitting sections would rewrite records to say
+things their authors did not write at the time. `CI` does not check them, and neither does
+`speckit-check`. Recommendation: leave historical artifacts alone; enforce the check at authoring
+time on new work.
+
+**B. `model:` absent from SKILL.md frontmatter (accepted WARN).**
+Adding it would fail the project's own gate — `scripts/self-gate.sh:633` allows only
+`{name, description, license, compatibility, metadata, allowed-tools}`. The kit is deliberately
+model-agnostic. Structurally impossible to satisfy both rules; the gate wins.
+
+**C. Two addenda exceed 200 lines (accepted WARN).**
+`plan-addendum.md` (258), `spec-addendum.md` (225). The rubric targets *reference* files a reader
+navigates; these are template fragments composed **into** users' `plan.md` and `spec.md`, so a table
+of contents inside them would be injected into every generated artifact. A real fix is a
+restructuring, which is a preset change needing a version bump. Scored as a warning rather than
+reclassified to N/A, deliberately — re-scoring my own finding upward mid-audit would be the exact
+"rounding up to green" this workflow exists to prevent.
+
+**D. Documented deviation:** `argument-hint` / `user-invocable` intentionally absent —
+`self-gate.sh:633` rejects them as non-portable. Covered above.
+
+---
+
+## Status of the two flagged guards
+
+Both guard classes were driven with real payloads, not read. The path guard in particular is
+verified **with the environment variable absent**, because that is how the plugin actually runs —
+and that single case is what exposed the fail-open bug that the harness's UNVERIFIED label misses.
 
 ---
 
 ## Recommended next
 
-1. Remove the temporary Sync Impact Report comment at the top of
-   `.specify/memory/constitution.md` before committing — it is review material, not governance.
-2. Commit: `hooks/speckit-hooks.yaml`, `.opencode/hook/hooks.yaml`,
-   `skill/spec-driven-development/SKILL.md`, `.specify/memory/constitution.md`, `decisions/0001-…`,
-   `.ignore`, `audit-report.md`, `specs/quick-log.md`.
-3. Suggested message: `docs: ratify constitution at 1.0.0; fix two silently-failing guards`
+Nothing is required for the project to be correct. Optional, in priority order:
+
+1. When `001`/`002` are next touched for any reason, backfill their missing sections then — not as a
+   standalone rewrite.
+2. Teach `check-section-integrity.sh` to ignore template parentheticals, so it stops reporting
+   `### Key Entities` against `### Key Entities *(include if data)*`. That is a real improvement to
+   the checker, and a separate change with its own tests.
+3. Next preset version: consider splitting the two long addenda.
 
 Re-audit with `skill("audit-project")` after any further change.

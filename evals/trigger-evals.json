@@ -97,7 +97,7 @@
     {
       "id": "snt-07",
       "context": "spec-kit",
-      "query": "Read specs/001-faq-block/spec.md and summarise it for me in three bullet points.",
+      "query": "Read specs/003-autonomous-throughput/spec.md and summarise it for me in three bullet points.",
       "why": "mentions specs/ and sits in a spec-kit repo, but it is a read-and-summarise request with no change to make - there is no workflow to run"
     },
     {
