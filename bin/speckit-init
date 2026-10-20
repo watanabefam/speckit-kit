@@ -482,6 +482,27 @@ else
   warn "  add a manifest (package.json / pyproject.toml / Makefile) or set the command by hand, then re-run"
 fi
 
+# --- 7. Section-integrity check (referenced by /speckit.plan) -------------------
+# The plan command tells the agent to run `.specify/scripts/check-section-integrity.sh`, so the
+# script has to BE there. It takes the project root as its first argument and finds the template
+# resolver from it, so the copy works from either location. `.specify/scripts/` is a generated tree
+# by this kit's own contract — no hand edits — so a stale copy is replaced rather than preserved.
+SIC_SRC="$KIT_ROOT/scripts/check-section-integrity.sh"
+SIC_DST="$ROOT/.specify/scripts/check-section-integrity.sh"
+if [ -f "$SIC_SRC" ]; then
+  mkdir -p "$ROOT/.specify/scripts"
+  if [ ! -f "$SIC_DST" ]; then
+    cp "$SIC_SRC" "$SIC_DST"; chmod +x "$SIC_DST"
+    say "installed .specify/scripts/check-section-integrity.sh (used by /speckit.plan)"
+  elif cmp -s "$SIC_SRC" "$SIC_DST"; then
+    chmod +x "$SIC_DST"
+    say "section-integrity check already current"
+  else
+    cp "$SIC_SRC" "$SIC_DST"; chmod +x "$SIC_DST"
+    say "updated .specify/scripts/check-section-integrity.sh to the current version"
+  fi
+fi
+
 # --- 8. Let the extension seed its managed block ------------------------------
 bash .specify/extensions/agent-context/scripts/bash/update-agent-context.sh >/dev/null 2>&1 || true
 

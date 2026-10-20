@@ -373,6 +373,13 @@ if [ -x "$CK" ]; then
   touch "$TD/README.md"; git -C "$TD" add -A
   git -C "$TD" -c user.email=e@e -c user.name=e commit -qm init
   "$ROOT/bin/speckit-init" "$TD" >/dev/null 2>&1 || true
+  # /speckit.plan names `.specify/scripts/check-section-integrity.sh`; a fresh install must put it
+  # there and make it runnable, or the command ships a dead path.
+  if [ -x "$TD/.specify/scripts/check-section-integrity.sh" ]; then
+    ok "a fresh install ships the section-integrity check where /speckit.plan looks for it"
+  else
+    bad "a fresh install did not create .specify/scripts/check-section-integrity.sh (executable)"
+  fi
   # A fresh install may legitimately return 3 (a governance DECISION: its constitution can lag
   # the template's appended sections). It must NEVER return 1 (drift) or 2. Capture the code and
   # the output, so a failure says WHICH property broke — the lesson from the changelog where
@@ -1098,6 +1105,7 @@ PY
     #   3. it reaches a fixed point.
     cp scripts/verify /tmp/sg-verify1
     cp opencode.json /tmp/sg-oc1
+    cp .specify/scripts/check-section-integrity.sh /tmp/sg-sic1
     cp AGENTS.md /tmp/sg-run1.md
     "$ROOT/bin/speckit-init" "$T" >/dev/null 2>&1 || true
     cp AGENTS.md /tmp/sg-run2.md
@@ -1117,12 +1125,13 @@ PY
       bad "does not reach a fixed point: run2 != run3"
     fi
     # P-001 (partial): the other installer-owned artifacts are idempotent too.
-    if cmp -s scripts/verify /tmp/sg-verify1 && cmp -s opencode.json /tmp/sg-oc1; then
-      ok "re-run leaves scripts/verify and opencode.json unchanged"
+    if cmp -s scripts/verify /tmp/sg-verify1 && cmp -s opencode.json /tmp/sg-oc1 \
+       && cmp -s .specify/scripts/check-section-integrity.sh /tmp/sg-sic1; then
+      ok "re-run leaves scripts/verify, opencode.json and the installed check unchanged"
     else
-      bad "re-run altered scripts/verify or opencode.json"
+      bad "re-run altered scripts/verify, opencode.json or the installed check"
     fi
-    rm -f /tmp/sg-run1.md /tmp/sg-run2.md /tmp/sg-run3.md /tmp/sg-verify1 /tmp/sg-oc1
+    rm -f /tmp/sg-run1.md /tmp/sg-run2.md /tmp/sg-run3.md /tmp/sg-verify1 /tmp/sg-oc1 /tmp/sg-sic1
   else
     skip 'specify CLI not on PATH (install with: uv tool install specify-cli)'
   fi
@@ -1130,6 +1139,20 @@ fi
 
 hdr "3d. section integrity — the conformance check for 3b"
 SIC="$ROOT/scripts/check-section-integrity.sh"
+# /speckit.plan tells the agent to run the `.specify/scripts` copy, so that copy must exist and be
+# the same file. Asserted before the PyYAML skip below: shipping a script needs no YAML, and a
+# dead path in a shipped command is not something a missing library should hide.
+SIC_INST="$ROOT/.specify/scripts/check-section-integrity.sh"
+if [ -f "$SIC_INST" ] && cmp -s "$SIC" "$SIC_INST"; then
+  ok "the .specify/scripts copy that /speckit.plan names matches the source"
+else
+  bad "the .specify/scripts copy is missing or stale — /speckit.plan points at a script that will not run"
+fi
+if [ -x "$SIC_INST" ]; then
+  ok "the installed check is executable"
+else
+  bad "the installed check exists but is not executable"
+fi
 if [ ! -f "$SIC" ]; then
   bad "scripts/check-section-integrity.sh is missing — the section-integrity rule is prose-only again"
 elif ! python3 -c "import yaml" >/dev/null 2>&1; then

@@ -127,8 +127,9 @@ Nothing is required for the project to be correct. Optional, in priority order:
 1. When `001`/`002` are next touched for any reason, backfill their missing sections then — not as a
    standalone rewrite.
 2. ~~Teach `check-section-integrity.sh` to ignore template parentheticals.~~ Done 2026-10-21, with
-   five gate tests. What remains is option 1 (backfill `001`/`002` if touched) and deciding where
-   the check script lives for adopters — see the open question in `specs/quick-log.md`.
+   seven gate tests. The same change makes the path `/speckit.plan` names real: `speckit-init` now
+   installs the script to `.specify/scripts/check-section-integrity.sh`. What remains is option 1
+   (backfill `001`/`002` if touched).
 3. Next preset version: consider splitting the two long addenda.
 
 Re-audit with `skill("audit-project")` after any further change.

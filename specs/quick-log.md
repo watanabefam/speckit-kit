@@ -81,7 +81,9 @@ both fail. `self-gate.sh` 3d now runs five cases including the two that would ha
 above (guidance note omitted -> accept; `OPTIONAL` section absent -> accept; resolved `tasks-template`
 -> accept). `./scripts/verify` -> `SELF-GATE: PASS`, exit 0.
 
-Parked: the generated `/speckit.plan` command points at `.specify/scripts/check-section-integrity.sh`,
-but that path does not exist and no installer creates it. The preset source says
-`scripts/check-section-integrity.sh`; the command composer rewrites the prefix. Fixing this decides
-where the script lives in every adopter project, so it is not a fast-lane change. Raised with the user.
+Same change closed a dead path: the generated `/speckit.plan` command tells the agent to run
+`.specify/scripts/check-section-integrity.sh`, but nothing created it, so the command pointed at a
+script that was not there. `speckit-init` now installs the script at that path (it takes the project
+root as an argument, so it works from either location) and replaces a stale copy, since
+`.specify/scripts/` is a generated tree. Gate coverage: a fresh install must ship it executable, a
+re-run must leave it unchanged, and this repo's copy must match the source byte for byte.
