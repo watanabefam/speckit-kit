@@ -54,3 +54,34 @@ sections missing). `./scripts/verify` -> `SELF-GATE: PASS`.
 
 Parked: the temporary Sync Impact Report comment at the top of the constitution is still present; it
 must be removed before committing.
+
+## 2026-10-21 — section-integrity check stops reporting phantom failures
+
+Fast lane, one script plus its tests. `check-section-integrity.sh` compared heading strings
+verbatim, so a spec that wrote `### Key Entities` was reported MISSING against the template's
+`### Key Entities *(include if feature involves data)*`. The artifact was right; the checker was
+wrong. Since a check that fires on conformant work gets ignored or deleted, this mattered.
+
+Headings are now normalised before comparison — trailing whitespace, a trailing `⚠️`, a trailing
+guidance parenthetical and a trailing italic note are stripped. Two further bugs surfaced while
+testing and are fixed in the same file:
+
+- **Repeated headings read as reordered.** `tasks-template` contains `### Worked example` twice. The
+  inner search restarted from the top of the artifact for every requirement, so the second
+  requirement matched the first occurrence, which sat behind the cursor. The template failed against
+  itself. The search now takes the first occurrence strictly after the cursor, which still detects a
+  genuine move (the heading exists, but not ahead of the cursor).
+- **Order waivers matched the un-normalised name.** `## Requirements Syntax (EARS)` no longer
+  exists as a string once normalised, so the waiver had to move to `## Requirements Syntax`.
+
+Evidence: all three resolved templates now pass against themselves; `003/spec.md` went 2 missing -> 1
+(the remainder is real: "which document wins" is prose, not a heading); `003/plan.md` conformant.
+Controls still bite — dropping `## Success Criteria` and dropping `### Implementation for User Story 2`
+both fail. `self-gate.sh` 3d now runs five cases including the two that would have caught the bugs
+above (guidance note omitted -> accept; `OPTIONAL` section absent -> accept; resolved `tasks-template`
+-> accept). `./scripts/verify` -> `SELF-GATE: PASS`, exit 0.
+
+Parked: the generated `/speckit.plan` command points at `.specify/scripts/check-section-integrity.sh`,
+but that path does not exist and no installer creates it. The preset source says
+`scripts/check-section-integrity.sh`; the command composer rewrites the prefix. Fixing this decides
+where the script lives in every adopter project, so it is not a fast-lane change. Raised with the user.

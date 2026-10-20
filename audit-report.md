@@ -66,22 +66,27 @@ already-committed specs list confirmed.
 ## Observations (checked, not defects, deliberately not "fixed")
 
 **A. Historical spec artifacts predate the current template.**
-`scripts/check-section-integrity.sh` against the resolved templates:
+`scripts/check-section-integrity.sh` against the resolved templates, after the 2026-10-21 fix:
 
 | Artifact | Result |
 |---|---|
-| `003/spec.md` | 2 missing headings — both already covered in prose |
+| `003/spec.md` | 1 missing heading — substance present in prose |
 | `003/plan.md` | **conformant** |
-| `003/tasks.md` | 3 missing headings |
+| `003/tasks.md` | 3 missing headings — renamed or re-levelled |
 | `001/spec.md`, `001/plan.md`, `001/tasks.md` | written 2026-10-04, before several template additions |
 | `002/spec.md`, `002/plan.md`, `002/tasks.md` | written 2026-10-17 |
 
-Two reasons this is not a fix:
-- The checker compares **exact heading strings**. `003/spec.md` has `### Key Entities`; the template
-  says `### Key Entities *(include if feature involves data)*`. The content is present — only the
-  instructional parenthetical differs, which is meant to be dropped when filling in.
+The checker compared heading strings verbatim, so `### Key Entities` never matched the template's
+`### Key Entities *(include if feature involves data)*` and a conformant spec reported MISSING.
+That is fixed: guidance parentheticals, trailing `⚠️` and italic notes are stripped before
+comparison, and a heading that appears twice (`### Worked example` in `tasks-template`) no longer
+reads as reordered. The remaining failures are genuine differences in what a heading *says*:
+
 - `003/spec.md` covers "which document wins" in prose under `## Normative Status` ("where the two
   disagree, this spec prevails"). The substance exists; the sub-heading does not.
+- `003/tasks.md` writes `## Phase 7: Polish & Cross-Cutting Concerns` where the template says
+  `## Phase N: …`, `### Task-level dependencies` where it says `### User Story Dependencies`, and
+  puts `Parallel Opportunities` at level 2 where the template has level 3.
 
 For 001 and 002 the drift is real but historical: they were authored against earlier template
 versions, they record completed features, and retrofitting sections would rewrite records to say
@@ -121,9 +126,9 @@ Nothing is required for the project to be correct. Optional, in priority order:
 
 1. When `001`/`002` are next touched for any reason, backfill their missing sections then — not as a
    standalone rewrite.
-2. Teach `check-section-integrity.sh` to ignore template parentheticals, so it stops reporting
-   `### Key Entities` against `### Key Entities *(include if data)*`. That is a real improvement to
-   the checker, and a separate change with its own tests.
+2. ~~Teach `check-section-integrity.sh` to ignore template parentheticals.~~ Done 2026-10-21, with
+   five gate tests. What remains is option 1 (backfill `001`/`002` if touched) and deciding where
+   the check script lives for adopters — see the open question in `specs/quick-log.md`.
 3. Next preset version: consider splitting the two long addenda.
 
 Re-audit with `skill("audit-project")` after any further change.

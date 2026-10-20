@@ -1155,6 +1155,39 @@ else
     else
       ok "catches a missing required section"
     fi
+
+    # Normalisation. A template heading carries guidance the artifact must not copy, e.g.
+    # '### Key Entities *(include if feature involves data)*'. A conformant spec writes
+    # '### Key Entities'; reporting that as MISSING is a false positive that makes the whole
+    # check untrustworthy, so it is pinned here.
+    sed 's/^### Key Entities .*$/### Key Entities/' "$SICD/ok.md" > "$SICD/noguidance.md"
+    if bash "$SIC" "$ROOT" spec-template "$SICD/noguidance.md" >/dev/null 2>&1; then
+      ok "accepts a section written without the template's guidance note"
+    else
+      bad "rejected a section written without the template's guidance note (false positive)"
+    fi
+
+    # Two further pinning tests, both against the TASKS template — which the fixture above never
+    # touched, and which carries '### Worked example' twice. A repeated heading used to be read as
+    # reordered because the search restarted from the top of the artifact each time.
+    if bash "$ROOT/.specify/scripts/bash/resolve-template.sh" tasks-template > "$SICD/tasks.md" 2>/dev/null \
+       && [ -s "$SICD/tasks.md" ]; then
+      if bash "$SIC" "$ROOT" tasks-template "$SICD/tasks.md" >/dev/null 2>&1; then
+        ok "accepts the resolved tasks template (a repeated heading is not 'reordered')"
+      else
+        bad "rejected the resolved tasks template"
+      fi
+      # A heading marked OPTIONAL must not be required: demanding it asserts the opposite of what
+      # the template says, and would fail every feature that did not ask for tests.
+      grep -v '^### Tests for User Story 1 (OPTIONAL' "$SICD/tasks.md" > "$SICD/tasks-opt.md" || true
+      if bash "$SIC" "$ROOT" tasks-template "$SICD/tasks-opt.md" >/dev/null 2>&1; then
+        ok "does not require a section the template marks OPTIONAL"
+      else
+        bad "required a section the template marks OPTIONAL"
+      fi
+    else
+      bad "could not resolve tasks-template for the normalisation fixtures"
+    fi
   else
     bad "could not resolve spec-template to build the conformance fixture"
     # Surface the resolver's own error: discarding stderr is why this failed on one
