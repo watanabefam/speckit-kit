@@ -87,3 +87,21 @@ script that was not there. `speckit-init` now installs the script at that path (
 root as an argument, so it works from either location) and replaces a stale copy, since
 `.specify/scripts/` is a generated tree. Gate coverage: a fresh install must ship it executable, a
 re-run must leave it unchanged, and this repo's copy must match the source byte for byte.
+
+## 2026-10-21 — installer could not find itself by a relative path
+
+Fast lane, found while simulating a bulk update of the 14 repos that use this kit.
+
+`speckit-init` does `cd "$ROOT"` at line 122, then later rebuilt its own directory from
+`$BASH_SOURCE[0]`. Invoked as `./bin/speckit-init ~/proj`, that path is relative and no longer
+resolves from inside the target, so the `cd` failed and the optional CiteKit MCP registration was
+skipped behind a `|| true`. Silent, and invisible when the installer is called by absolute path —
+which is exactly how the tests called it. The script already computed `$SELF` as a realpath at line
+56; that is now used.
+
+Evidence: simulating `./bin/speckit-init <tmp>` from the kit root printed
+`cd: speckit-kit/bin: No such file or directory` and no MCP line; after the fix, exit 0 with
+`registered the citekit MCP server`. Gate gains a behavioural relative-path test. `./scripts/verify`
+-> `SELF-GATE: PASS`.
+
+Parked: bulk repo update awaiting decisions (hooks, dirty trees, commits).

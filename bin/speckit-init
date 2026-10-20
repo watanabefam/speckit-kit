@@ -514,7 +514,10 @@ presets=$(ls -1 .specify/presets 2>/dev/null | wc -l | tr -d ' ')
 # one specific tool, and a hard dependency would break installs that lack it. The script detects,
 # registers when it can, and skips with a reason when it cannot. `--no-mcp` opts out.
 if [ "$NO_MCP" = "false" ]; then
-  SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  # $SELF is already resolved absolute (line ~56). Do NOT re-derive this from $BASH_SOURCE: the
+  # script has cd'd into the target project by now, so a relative invocation such as
+  # `./bin/speckit-init ~/proj` made this `cd` fail and silently skipped MCP registration.
+  SELF_DIR="$(dirname "$SELF")"
   if [ -f "$SELF_DIR/speckit-mcp" ]; then
     bash "$SELF_DIR/speckit-mcp" "$ROOT" || true
   fi

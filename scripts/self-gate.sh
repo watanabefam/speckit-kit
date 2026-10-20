@@ -380,6 +380,18 @@ if [ -x "$CK" ]; then
   else
     bad "a fresh install did not create .specify/scripts/check-section-integrity.sh (executable)"
   fi
+  # Invoked by a RELATIVE path, the installer cd's into the target and then re-derived its own
+  # directory from $BASH_SOURCE — which no longer resolved. The failure was silent (an optional
+  # MCP registration behind `|| true`), and invisible when called by absolute path, so it is
+  # asserted behaviourally here.
+  TDR="$(mktemp -d)"; git init -q "$TDR" 2>/dev/null
+  _relout="$( cd "$ROOT" && ./bin/speckit-init "$TDR" 2>&1 )" || true
+  if printf '%s' "$_relout" | grep -q "No such file or directory"; then
+    bad "installer invoked by a relative path cannot locate its own directory"
+  else
+    ok "installer works when invoked by a relative path"
+  fi
+  rm -rf "$TDR"
   # A fresh install may legitimately return 3 (a governance DECISION: its constitution can lag
   # the template's appended sections). It must NEVER return 1 (drift) or 2. Capture the code and
   # the output, so a failure says WHICH property broke — the lesson from the changelog where
