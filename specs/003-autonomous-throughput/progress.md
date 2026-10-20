@@ -204,3 +204,73 @@ is green on both runners.
 `e2e-gate: success`, `static-gate (macos-latest): success`, `static-gate (ubuntu-latest): success` on
 `4121177`. CI had been red since `fa4e345` (2026-10-16). **T032 is now closed** — Linux bash 5 and
 macOS system bash 3.2 are both verified by CI, which is stronger evidence than a local run.
+
+---
+
+# SESSION HANDOFF — read this first (compacted 2026-10-19)
+
+This block supersedes the "## Close" header above, which was written mid-feature and is stale.
+
+**State: spec 003 is complete.** All 46 tasks ticked, none open. `main` == `origin/main` at
+`445ec95`. CI green on `ubuntu-latest` (bash 5), `macos-latest` (system bash 3.2) and the e2e job.
+The kit is at **1.13.0** — a concurrent session landed the CiteKit-MCP and constitution-DECISION
+work partway through this one, so the changelog has more than this spec's entries.
+
+## Verify first, before assuming anything
+
+```sh
+./scripts/self-gate.sh                        # expect "SELF-GATE: PASS" (246 ok, 0 FAIL)
+./bin/speckit-check                           # "current"; exit 3 = a governance DECISION, not drift
+gh run list --limit 1                         # expect success on all three jobs
+python3 evals/run-scenario-evals.py --fake    # scripted agent; the live variant spends model calls
+./bin/speckit-resume specs/003-autonomous-throughput   # expect "COMPLETE"
+```
+
+## What this spec added (where to look)
+
+| Thing | File | Why it exists |
+| --- | --- | --- |
+| Permission boundary | `permissions/opencode-permission.jsonc` → installer §2d | Deny/ask in the project's `opencode.json`; a rule that can't be violated belongs there, not in prose |
+| Four hooks | `hooks/speckit-hooks.yaml` | no-verify, generated-files, force-push, destructive-commands — the only layer that can refuse a call |
+| Autonomy contract | `global/autonomy-contract.md` → §2e | One file, one pointer line; keeps the instruction budget small |
+| Commands block + verify | installer §6b | Detects the stack, writes `## Commands`, generates `scripts/verify` |
+| Continuous execution | `preset/commands/speckit.implement.prepend.md` | Runs approved work through, halts on a budget |
+| Fast lane | `commands/speckit.quick.md` | Installer-copied — a preset cannot create a command |
+| Mechanical resume | `bin/speckit-resume` | The resume rule has an oracle, so §1i can assert it |
+| Scenario harness | `evals/run-scenario-evals.py` | S4/S8/S9 with observable oracles; `--fake` for CI |
+
+Gate sections added: **§1d2** (autonomy artifacts), **§1d3** (deny under both rule semantics),
+**§1i** (resume oracle + metamorphic relations), **§1j** (scenarios + negative controls).
+
+## Gotchas — do not relearn these
+
+- **A nested `opencode run` ignores `cwd`.** It attached to the enclosing session and acted on the
+  *kit* repo. Use `--dir <project>`, strip `OPENCODE_*` from the child env, and fingerprint the kit
+  repo before/after. The harness does all three.
+- **Rule precedence is not permanent.** opencode resolves with `findLast` (last match wins) today; an
+  open PR moves to most-specific-wins. The ruleset is deliberately written so *both* agree; §1d3
+  asserts both. Do not "simplify" the ordering or drop the catch-all-first layout.
+- **Byte-identity is the wrong no-clobber test.** `specify preset add/update` normalises
+  `opencode.json` (strips blank lines) and the CiteKit step's `opencode mcp add` writes a `$schema`
+  line. The contract (FR-002, amended) is *no user key removed or altered*.
+- **CI environment differs from a Mac.** GitHub's macOS runner python3 has **no PyYAML** (so §3d
+  skips); the static-gate job does **not** install `specify` (so §1g/§5/§1b must skip, not fail);
+  `timeout` does not exist on macOS.
+- **A global hook matches coarse substrings** and blocks commands that merely *mention* destructive
+  strings. Put such literals in a file, not on the command line.
+- **Surface the evidence on failure.** Four bugs this session were invisible because an assertion
+  discarded stderr or the agent's output. §1b, §1g, §3d and the no-clobber check now print it.
+
+## Audit note (2026-10-19)
+
+`audit-project` Phase 8b ran the guard-behaviour corpus against the hooks: **0 FAIL, 1 WARN, 2
+UNVERIFIED**. Adjudication:
+- The WARN (`env core.hooksPath=/dev/null git commit -m x` → exit 0) is a **false positive**: `env`
+  sets an *environment variable* named `core.hooksPath`, which is not git config. No bypass.
+- The two UNVERIFIED guards are outside that corpus by construction (path-based / no declared
+  signal). Not evidence of a gap — but not evidence of safety either.
+
+## Open
+
+Nothing in this spec. `blog/` is untracked and belongs to the repo owner. If the hooks are touched
+again, re-run `python3 ~/.config/opencode/skills/audit-project/scripts/guard-behavior.py .`.
