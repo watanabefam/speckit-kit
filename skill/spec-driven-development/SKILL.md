@@ -1,11 +1,12 @@
 ---
 name: spec-driven-development
 description: "Spec-driven development for software work in a repository containing a .specify/ directory (the Spec Kit marker): new features, bug fixes, refactors, migrations, maintenance, dependency and documentation updates; diagnosing an unknown cause before fixing, such as a performance regression, slow build, or flaky or intermittent failure; refactors spanning several call sites or changing a public contract; and deciding how much process a request warrants. Covers workflow selection proportional to risk, approval gates, requirement traceability, handoff discipline, contradiction repair, scope control, and evidence-based completion."
+allowed-tools: Read, Grep, Glob, Bash, Edit, Write, Task
 license: MIT
 metadata:
   category: development
   audience: developers
-  version: "1.1.0"
+  version: "1.1.1"
 ---
 
 # Spec-Driven Development
@@ -25,7 +26,7 @@ any other; the model can still deviate. This is a deliberate limit, not a defect
 | --- | --- |
 | a rule to be *present* whenever a step runs | a command (this kit) |
 | a rule to be *followed* reliably | a command, and check the artifact afterwards |
-| a rule that *cannot* be violated | a hook or a permission — not a command, and not this skill |
+| a rule that *cannot be violated* | a hook or a permission — not a command, and not this skill |
 
 Do not describe a command as "enforcing" anything. Nothing in this kit can enforce. What the kit
 buys is that the rule is in front of the model at the moment it acts, instead of depending on a
@@ -49,11 +50,35 @@ does not fit in a short command contribution. It deliberately does **not** resta
 
 ## The loop
 
-`constitution` → `specify` → `plan` → `tasks` → `implement` → `converge`
+Six steps. Run one at a time, and let the user review before continuing.
 
-One step at a time; let the user review before continuing. Optional gates when the change
-warrants them: `clarify` (before `plan`), `checklist` (after `plan`), `analyze` (after `tasks`,
-before `implement`).
+### Step 1 — `constitution`
+
+What the project must hold true. Amending it is a governance change: approval, a version bump,
+and a decision record.
+
+### Step 2 — `specify`
+
+What the change is for, written as requirements the work can be traced back to.
+
+### Step 3 — `plan`
+
+How it will be built, written against the repository as it actually is rather than as assumed.
+
+### Step 4 — `tasks`
+
+The numbered work items — each tracing to a requirement, each with one verifiable outcome.
+
+### Step 5 — `implement`
+
+Approved work only, executed continuously, with evidence before anything is called done.
+
+### Step 6 — `converge`
+
+What was built, compared against what the artifacts said — no rounding up to green.
+
+Optional gates when the change warrants them: `clarify` (before `plan`), `checklist` (after
+`plan`), `analyze` (after `tasks`, before `implement`).
 
 For work below the process's useful size, the fast lane `/speckit.quick` skips the artifacts
 entirely (failing test → smallest change → verify → one log entry) and promotes to `/speckit.specify`
@@ -94,3 +119,12 @@ Read one when its trigger applies; they are one level deep and load on demand.
 | `references/existing-project.md` | before adopting this workflow in a repository that already has code |
 | `references/anti-patterns.md` | when deciding how much process a request warrants, or when a step feels like ceremony |
 | `references/convergence.md` | at close-out, comparing what was built against what the artifacts said |
+
+## Where to go next
+
+Start at `/speckit` — it classifies the request and picks the smallest workflow that fits. If you
+are already inside a step, read the command you are about to run: it carries its own rules, and
+where it and this skill disagree, the command wins.
+
+Adopting this workflow in a repository that already has code? Read
+`references/existing-project.md` before choosing anything.

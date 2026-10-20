@@ -74,14 +74,21 @@ hooks:
             #   (c) a `commit` subcommand followed later by a `-n` arg.
             #       `-n` is ambiguous in isolation, so it only fires when a
             #       commit subcommand was seen.
+            # TWO PASSES, deliberately. A single pass that starts checking only
+            # after the first `git` token is defeated by any wrapper that puts
+            # tokens BEFORE it: `env core.hooksPath=/dev/null git commit -m x`
+            # walked straight past the old guard (verified by an adversarial
+            # probe, exit 0). Pass 1 asks "is there a git token at all"; pass 2
+            # checks every token, in any position.
             if awk '
               {
-                saw_git = 0; saw_commit = 0
+                has_git = 0
+                for (i = 1; i <= NF; i++) if ($i == "git") has_git = 1
+                if (!has_git) next
+                saw_commit = 0
                 for (i = 1; i <= NF; i++) {
                   t = $i
-                  if (t == "git")        { saw_git = 1; continue }
-                  if (!saw_git)           continue
-                  if (t == "--no-verify") { print "BLOCK"; exit }
+                  if (t == "--no-verify")      { print "BLOCK"; exit }
                   if (t ~ /^core\.hooksPath=/) { print "BLOCK"; exit }
                   if (t == "commit" || t == "commit-tree") { saw_commit = 1 }
                   if (saw_commit && t == "-n") { print "BLOCK"; exit }
@@ -135,22 +142,45 @@ hooks:
               *) exit 0 ;;
             esac
 
-            # Collect every path the call touches.
+            # Collect every path the call touches. Args are read from BOTH
+            # `.tool_args.*` (the shape this plugin actually sends — the bash
+            # guard reads `.tool_args.command`) and the root, because a
+            # multiedit-style payload nests its targets differently and an
+            # unlisted shape means the edit is silently unprotected.
             paths=$(printf '%s' "$payload" | jq -r '
               [ .tool_args.filePath?,
                 .tool_args.file_path?,
+                .tool_args.path?,
+                (.tool_args.changes[]?.path?),
+                (.tool_args.changes[]?.toPath?),
+                (.tool_args.files[]?.filePath?),
+                (.tool_args.files[]?.path?),
                 (.changes[]?.path?),
-                (.changes[]?.toPath?) ]
+                (.changes[]?.toPath?),
+                (.files[]?.filePath?),
+                (.files[]?.path?) ]
               | map(select(. != null and . != "")) | .[]' 2>/dev/null || true)
             [ -z "$paths" ] && exit 0
+
+            # DEFAULTED, deliberately. The plugin exports no OPENCODE_PROJECT_DIR
+            # (verified: only OPENCODE_CONFIG_CONTENT is in the environment), so
+            # `set -u` made this line abort with exit 1 — and the harness only
+            # treats exit 2 as blocking, so the whole guard failed OPEN and
+            # protected nothing. An absent variable must mean "no absolute
+            # prefix to strip", never "crash".
+            project_dir="${OPENCODE_PROJECT_DIR:-}"
 
             while IFS= read -r p; do
               [ -z "$p" ] && continue
               # normalise: strip a leading ./ and any absolute prefix up to the project dir
               case "$p" in
                 ./*) p="${p#./}" ;;
-                "$OPENCODE_PROJECT_DIR"/*) p="${p#"$OPENCODE_PROJECT_DIR"/}" ;;
               esac
+              if [ -n "$project_dir" ]; then
+                case "$p" in
+                  "$project_dir"/*) p="${p#"$project_dir"/}" ;;
+                esac
+              fi
               case "$p" in
                 .opencode/commands/speckit*.md \
                 | .specify/scripts/* \
