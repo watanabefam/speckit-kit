@@ -22,6 +22,13 @@ ok()  { printf '  ok    %s\n' "$*"; }
 bad() { printf '  FAIL  %s\n' "$*"; fail=1; }
 hdr() { printf '\n== %s ==\n' "$*"; }
 
+# A skip is not a pass. It is counted, named, and reported in the final verdict, so a build that
+# silently did less work cannot be mistaken for one that did all of it. (The flaky-test literature
+# is blunt about this: a check that did not run provides no signal, and reporting it as a pass
+# converts a missing capability into a green build.)
+SKIP_COUNT=0
+skip() { SKIP_COUNT=$((SKIP_COUNT+1)); skip '%s' "$*"; }
+
 hdr "1. installer parses under this bash ($BASH_VERSION)"
 if bash -n "$ROOT/bin/speckit-init"; then
   ok "bin/speckit-init parses"
@@ -357,7 +364,7 @@ if [ -x "$CK" ]; then
   # The STATIC gate job deliberately does not install it, so without this guard the
   # section failed on a missing tool rather than on a defect. §5 already skips the same way.
   if ! command -v specify >/dev/null 2>&1; then
-    printf '  skip  specify CLI not on PATH — the functional drift checks need it\n'
+    skip 'specify CLI not on PATH — the functional drift checks need it'
   else
   # Functional: a deliberately-stale repo must be flagged, a current one must not.
   # (Previously this checked the kit's own repo, which was kept stale on purpose;
@@ -1117,7 +1124,7 @@ PY
     fi
     rm -f /tmp/sg-run1.md /tmp/sg-run2.md /tmp/sg-run3.md /tmp/sg-verify1 /tmp/sg-oc1
   else
-    printf '  skip  specify CLI not on PATH (install with: uv tool install specify-cli)\n'
+    skip 'specify CLI not on PATH (install with: uv tool install specify-cli)'
   fi
 fi
 
@@ -1129,7 +1136,7 @@ elif ! python3 -c "import yaml" >/dev/null 2>&1; then
   # The fixture resolves the template through .specify/scripts/bash/resolve-template.sh,
   # which needs PyYAML. GitHub's macOS runner python3 does not ship it, so this section
   # went red there for a reason unrelated to the check itself. Skip with the reason.
-  printf '  skip  PyYAML not available — the fixture needs it to resolve the template\n'
+  skip 'PyYAML not available — the fixture needs it to resolve the template'
 else
   SICD="$(mktemp -d)"
   if bash "$ROOT/.specify/scripts/bash/resolve-template.sh" spec-template > "$SICD/ok.md" 2>"$SICD/err" \
@@ -1187,5 +1194,11 @@ else
 fi
 
 printf '\n'
-if [ "$fail" = "0" ]; then echo "SELF-GATE: PASS"; else echo "SELF-GATE: FAIL"; fi
+if [ "$SKIP_COUNT" -gt 0 ]; then
+  _verdict="FAIL"; [ "$fail" = "0" ] && _verdict="PASS"
+  printf 'SELF-GATE: %s -- but %s section(s) were SKIPPED, and a skip is not a pass:\n' "$_verdict" "$SKIP_COUNT"
+  printf '  (the skipped sections are listed above; the build did not exercise them)\n'
+else
+  if [ "$fail" = "0" ]; then echo "SELF-GATE: PASS"; else echo "SELF-GATE: FAIL"; fi
+fi
 exit "$fail"

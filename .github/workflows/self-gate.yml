@@ -46,6 +46,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # The template resolver (resolve-template.sh) needs PyYAML, and the section-integrity fixture
+      # resolves the template through it. GitHub's macOS runner ships a system python3 without
+      # PyYAML, so §3d used to SKIP there — and a skip is not a pass, so the build went green
+      # without ever exercising the check. Install the dependency instead of skipping: the
+      # skip stays as a fallback for an adopter's machine, but CI actually runs the check.
+      - name: Install PyYAML (the template resolver needs it)
+        run: |
+          set -euo pipefail
+          python3 -m pip install --user --quiet --upgrade pip 2>/dev/null || true
+          python3 -m pip install --user --quiet pyyaml 2>/dev/null \
+            || python3 -m pip install --quiet --break-system-packages pyyaml 2>/dev/null \
+            || echo "note: could not install PyYAML; the section-integrity fixture will report a skip"
+          python3 -c "import yaml; print('PyYAML', yaml.__version__)"
+
       # macOS-only extra step: parse the installer with the SYSTEM bash, not the
       # one on PATH. On a GitHub macOS runner `bash` is Homebrew's 5.x, whereas
       # an adopter's Mac has 3.2.57 at /bin/bash - so the PATH bash cannot see
