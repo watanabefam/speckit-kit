@@ -155,3 +155,32 @@ in it rather than adding a new one.
    OpenAPI schema. **→ optional requirement under US7**, not a new item.
 
 Everything else in cluster B goes to **006** (`specs/006-workflow-orchestration/`).
+
+---
+
+## Corrections and completions after the independent check (2026-10-22)
+
+An adversarial check (`docs/research/spec-vs-research-check-2026-10-22.md`) found that four mechanics marked
+in the table above as landing in **006** did not appear as requirements, and that one upstream mechanic this
+table never listed is load-bearing. Both specs were repaired; this section records what changed so the
+table's "lands in" column is true again.
+
+| Mechanic | Was | Now |
+|---|---|---|
+| superpowers — **worktree isolation** | listed, no requirement | `006` **FR-033** (one `git worktree` per worker), **SC-001**/SC-008 dependent on it |
+| superpowers — **task-start BASE SHA ↔ task-done** | listed, no requirement | `006` **FR-035** (start records base commit, completion records the range) |
+| cc-sdd — **dependency-wave batching** | listed, only `_Depends:_` landed | `006` **FR-036** (independent tasks startable as a wave) |
+| specweave — **`glossary check --strict`** | listed, no requirement | `006` **FR-040** (deprecated/avoided terminology checkable, non-zero in CI) |
+| specweave — **handoff scrubs secrets before pushing** (from the upstream handoff docs; this table never listed it) | absent | `006` **FR-037**, **SC-010** (redact or do not push) |
+| cc-sdd — **cross-spec contradiction review** | partially landed (amendments only) | `006` **FR-026** widened to specifications worked in the same batch |
+| review as findings | adopted on `[read]` evidence, no accuracy requirement | `006` **FR-038**/FR-039, **SC-011** (how established, plus measured precision before findings count) |
+| claims | adopted, no substrate | `006` **FR-001** now names an atomic acquisition; `git update-ref --stdin` `create` was measured to fail rather than overwrite |
+
+Two further adjustments belong here rather than in the specs:
+
+- The TDD mechanic is **mechanism-justified**, not evidence-justified. `[read]` superpowers README is the only
+  source in this audit, and the defect-reduction literature on test-first is contested. `006` US3 now says so.
+- The audit's own "13.6% judge instability" reason for rejecting verdicts is mis-attributed in
+  `verification-tooling-2026-10.md` §2/§7; see that file's §12 item 2. The rejection stands on a different
+  mechanism (run-to-run self-inconsistency on identical input), and the reviewer's own failure mode is
+  measured precision, not absence of flipping.

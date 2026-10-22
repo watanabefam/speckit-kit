@@ -494,3 +494,34 @@ candidate item (traceability) was rejected outright. Spec written at `specs/005-
 - Goldstein et al., ICSE 2024 — `doi:10.1145/3597503.3639581` (PBT in practice: Amazon, Volvo, Stripe)
 - RESTestBench 2026 — `arXiv:2604.25862` (precise vs vague requirements and generated-test effectiveness)
 - Farooq et al., IEEE Access 2023 (BDD systematic review — mixed evidence, used to justify *not* claiming BDD benefits)
+
+---
+
+## 12. Corrections from the independent check (2026-10-22)
+
+An adversarial check (`docs/research/spec-vs-research-check-2026-10-22.md`) audited the two specs against
+this document and found places where this document itself was ambiguous, mis-attributed or unreproducible.
+The earlier text is left as written, per this document's convention; the corrections are here, and the two
+specs now point at this section. Each line says what was wrong and what replaces it.
+
+| # | Earlier text | Correction | Evidence |
+|---|---|---|---|
+| 1 | §6.3 "**0 of 6**" (:191) and §8 "seven synthetic variants" (:296), with a 7-row table whose first row's literal is never shown (:183) | Both counts describe the same table from different sides: **seven** variants probed, the module-level `ALL_CAPS = "..."` row is the only one **caught**, and **six** were missed by all three tools. Row 1's literal is not recorded, so "0 of 6" must be read as "no non-module-level variant was caught by any tool". Any claim of **eight** variants is unsupported. | the table itself, `:181-191` |
+| 2 | §2 (:275) and §7 "judge verdicts flip 13.6% on reordering" | 13.6% is **run-to-run self-inconsistency on identical input**, not reordering. Yagubyan (arXiv:2606.13685) ran 50 repeated pairwise trials per question over 29 tasks with two OpenAI judges; preferences changed 13.6% of the time between identical runs, 28% of questions exceeded 20%, and **position bias is a separate finding** (72% A-majority). The paper is about judging model *outputs*; no study extends this to a code-verification gate. The rejection of single-verdict judging survives — it is simply a different (and stronger) failure mode than reordering. | arXiv:2606.13685 abstract, fetched |
+| 3 | §2 and §10 attribute "**25–99%** false positives" to Basak et al., ICSE 2025 (`doi:10.1109/icse55347.2025.00067`) | That DOI is **AssetHarvester**, whose own headline result is **0% false positives** for secret–asset pairs. This document must not present the range as that paper's finding; the range was not verified here. Direction is corroborated independently: Rahman et al. (2022) found developers classified **50%** of secret-detection warnings as false positives, and GitHub (Jun 2026) reports a **75.76%** false-positive reduction from 1,500 confirmed false-positive alerts. Use "reported false-positive rates are high (25–99% by one cited account)" and cite the account that states it. | ICSE 2025 program abstract; PMC8928718; github.blog 2026-06-11 |
+| 4 | §10 "reproduced in three lines": union leaves order **reversed**, and an in-place edit yields **two records for id 1** | Not reproduced on git 2.43.0. Append-only merges preserved order in **both** merge directions, and an in-place content edit merged cleanly to a **single replaced record** — no duplicate id, no conflict, no error. The conclusion is unchanged and arguably worse: union silently accepts an edit that erases an immutable record. The requirements (immutable lines, unique ids, duplicate check, sort by timestamp) stand on git's documented "random order" warning plus this silent-replacement case, not on the duplicate-id reproduction. | local experiment, git 2.43.0 |
+| 5 | §11 round 4: TCE is a partial filter in Python, measured on Python 3.14.6 | Holds on **Python 3.12.3** as well: `x*2` vs `x+x` and `x/2` vs `x>>1` produce different bytecode (so TCE cannot filter them); an identical function and a docstring-only change produce identical bytecode (so TCE does filter them). The "partial filter" conclusion is version-independent across these two interpreters. | local experiment, Python 3.12.3 |
+| 6 | §7 "Explicitly not adopted: model-judge scoring as a gate … useful for triage" | The document gives **no evidence about a reviewer that files findings**, and the audit's argument for keeping one was an absence of rejection, not a measurement. Jin (2026) reports LLM reviewers *systematically over-reject*: they "frequently issue false negative judgments, incorrectly concluding that correct implementations fail to meet stated requirements". A reviewer is therefore a lower-noise mechanism than a verdict, not a noise-free one. 006 now requires a measured precision on a labelled sample before findings count as a signal. | `doi:10.1007/s10515-026-00638-5` (abstract) |
+| 7 | §11 round 4 quotes only mutmut's **4.4%/5.7%** verified-fault rate | The same paper's comparison is the useful part: test-aware mutant generation reaches **87.7%/79.1%** verified-fault rates, roughly **16×** fewer candidates per real finding. 005 records this as a rejected alternative *with its reason* (needs a model call per mutant and an independent oracle) rather than omitting it. | `doi:10.4230/LIPIcs.ESEM.2026.49` |
+| 8 | §5 item 2: claims/leases "only matters once parallel dispatch works, which it currently does not here" | The substrate now exists and was measured: `git update-ref --stdin`'s `create` **fails with "reference already exists"** rather than overwriting, and `update` with a wrong old-value fails too. So a claim can be acquired atomically with git alone, no daemon and no token; across checkouts the same conditional is carried by a ref update with an expected old value. | local experiment, git 2.43.0 |
+| 9 | §10 item 4 (changed-lines gating) does not say where the coverage profile comes from | It matters: diff-cover and Codecov's "patch coverage" both consume a **coverage report produced by a test run**, and a selected-run profile understates reachability. A changed-line figure is only evidence about "no test executes this" when the profile came from the full suite. 005 FR-033/FR-034 and SC-008 now say so. | diff-cover docs; Codecov FAQ ("patch coverage … the changed lines") |
+
+### Sources added by this correction
+
+- Yagubyan 2026 — `arXiv:2606.13685` (*The Coin Flip Judge?*)
+- Jin et al. 2026 — `doi:10.1007/s10515-026-00638-5` (*Are LLMs reliable code reviewers?*)
+- Rahman et al. 2022 — PMC8928718 (*Why secret detection tools are not enough*)
+- GitHub Security, 2026-06-11 — *Making secret scanning more trustworthy* (75.76% FP reduction)
+- OWASP DevSecOps Guideline — *Security Gates* (`trufflehog … --only-verified --fail`)
+- Codecov — *patch coverage*; `Bachmann1234/diff_cover` (coverage report + diff)
+- git-push(1) / git-update-ref(1) — conditional ref updates as the claim substrate

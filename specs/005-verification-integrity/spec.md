@@ -10,8 +10,9 @@
 
 ## Document Status
 
-**Workflow:** full spec-driven · **Companion:** `docs/research/verification-tooling-2026-10.md` (informative; 452 lines, five validation rounds, §10 authoritative)
+**Workflow:** full spec-driven · **Companion:** `docs/research/verification-tooling-2026-10.md` (informative; five validation rounds, §10 and §11 authoritative, §12 the corrections made after the independent check)
 **Normative sections:** User Scenarios & Testing, Requirements, Success Criteria.
+**Revised**: 2026-10-22 after `docs/research/spec-vs-research-check-2026-10-22.md` (findings C-01, H-01…H-03, M-01…M-08, L-01…L-05).
 **Relationship to 004:** `004-reliability-hardening` repaired the *kit's own* gate (its recursion, its skips, its ledger trust). This feature addresses a different subject: whether a **downstream project's** verification report means anything. Where the two overlap, 004's three-state verdict (`scripts/self-gate.sh:1477-1490`) is the precedent to copy, not to change.
 
 ## Problem / Opportunity
@@ -24,7 +25,7 @@ Measured locally, on this machine, during research:
 - `pytest` with **zero collected tests exits 5** — a state most wrappers report as "not a failure". Nothing ran, nothing was checked, and no number was printed.
 - A comparable tool (SpecWeave 3.1.5) accepted `--evidence "reviewed it myself, looks fine"` with **no command executed**, returning success; and with no acceptance criteria declared it printed `ACs 0/0` and **passed**.
 - Two independent 2026 papers name the same two vacuity classes: *examined nothing* ("vacuous pass") and *compared the code to itself* ("oracle anchoring").
-- A pinned security scanner suite missed a hand-written production password in **8 of 8** probe variants; the ones that fired only recognised **vendor token shapes**. False-positive rates for secret scanners in the literature run **25–99%**.
+- A pinned scanner suite (gitleaks, Semgrep's curated `p/secrets` pack, and a hand-written rule) missed **6 of the 7** realistic credential shapes it was probed with. Only the module-level `ALL_CAPS = "..."` shape was caught; `os.getenv("DB_PASSWORD", "fallback")`, a `{"password": ...}` literal, a class attribute, a default argument, a `postgres://` DSN and a lowercase assignment were all missed. Reported false-positive rates for rule-based secret scanners are high — **25–99%** in one cited account, **not measured here**.
 
 The kit cannot presently distinguish "verified" from "did not look". This feature makes a green result cost something.
 
@@ -36,12 +37,12 @@ An owner runs the project's verification command on a change that adds no tests,
 
 **Why this priority**: This is the whole thesis. It is independent of every other story, costs almost nothing to build, and all later detection work is worthless while a vacuous pass is possible.
 
-**Independent Test**: Run the verification command against four fixtures — zero tests, a check whose oracle is the implementation, a harness with a skipped section, and a clean negative control — and confirm each produces a distinct non-green outcome with a nonzero exit.
+**Independent Test**: Run the verification command against four fixtures — zero tests, a check that declares its oracle inside the implementation, a harness with a skipped section, and a clean negative control — and confirm each produces a distinct non-green outcome with a nonzero exit.
 
 **Acceptance Scenarios**:
 
 1. **Given** a project with collected tests equal to zero, **When** verification runs, **Then** it reports "nothing was examined" as a distinct state and exits nonzero.
-2. **Given** a check whose expected value is computed by the same code it is testing, **When** verification runs, **Then** the oracle-anchoring guard flags it and does not count it as evidence.
+2. **Given** a check that declares no source for its expected value, or declares one inside the code under test, **When** verification runs, **Then** the check is excluded from evidence and the exclusion is reported.
 3. **Given** an optional tool is absent so a section is skipped, **When** the full report is printed, **Then** the verdict reads `INCOMPLETE` and never `PASS`, and a strict mode exits nonzero.
 4. **Given** a deliberately broken fixture (negative control), **When** verification runs, **Then** it fails — proving the harness can still detect failure.
 
@@ -94,42 +95,44 @@ A one-file change is verified against the tests that can plausibly be affected, 
 2. **Given** a full run is requested, **When** it completes, **Then** the report may claim full coverage of the suite, and only then.
 3. **Given** a selection that misses a failing test elsewhere, **When** the report prints, **Then** it does not imply the whole suite is green.
 4. **Given** a test fails once and passes on a single re-run, **When** the result is recorded, **Then** it is labelled as flaky-and-classified, not as either a pass or a failure.
-5. **Given** lines were added or changed, **When** verification runs, **Then** it reports how many changed lines the executed tests actually reached and how many they did not — new code exercised by no test is "looked at nothing", scoped to the change.
+5. **Given** lines were added or changed, **When** verification runs, **Then** it reports how many changed lines the executed tests reached and how many they did not, and states which profile the figure came from — only a full-suite profile may be read as "no test executes this line".
 
 ---
 
 ### User Story 5 - Mutation results are review prompts, not a percentage (Priority: P3)
 
-An owner runs the expensive check on changed files and gets a short list of specific, named weaknesses: "this comparison could be inverted and no test would notice". They do not get a score to chase.
+An owner runs the expensive check on changed files and gets a short, bounded list of **candidates** to look at: "this comparison could be inverted and no test would notice — check it". They do not get a score to chase, and the list is not presented as a set of known defects: on the evidence in the companion, roughly 95% of rule-based survivors are not verified faults.
 
 **Why this priority**: High value, high cost, and the evidence says a threshold gate is counterproductive. It depends on US4's change set.
 
-**Independent Test**: Run on a fixture with one surviving mutant, and confirm the output is one named finding pointing at a line and an operator, with no aggregate percentage shown as a target.
+**Independent Test**: Run on a fixture with one surviving mutant, and confirm the output is one named candidate pointing at a line and an operator, with no aggregate percentage shown as a target.
 
 **Acceptance Scenarios**:
 
-1. **Given** changed files, **When** mutation mode runs, **Then** output is a bounded list of named survivors, each with file, line, and operator.
-2. **Given** the run completes, **When** the summary prints, **Then** no percentage is presented as a pass/fail threshold.
-3. **Given** a mutant that is behaviourally identical to the original, **When** results are assembled, **Then** it is labelled equivalent-or-unknown rather than counted as a weakness.
-4. **Given** the feature is not requested, **When** normal verification runs, **Then** mutation analysis does not run at all.
+1. **Given** changed files, **When** mutation mode runs, **Then** output is a bounded list of named candidates, each with file, line, operator, and how it died or that it survived.
+2. **Given** the run completes, **When** the summary prints, **Then** any percentage appears only as a non-blocking budget beside the candidate count, never as a pass/fail threshold.
+3. **Given** a mutant that is byte-identical to the original after compilation, **When** results are assembled, **Then** it is labelled equivalent and not counted as a candidate, and a mutant that is neither provably equivalent nor classified is labelled unknown rather than equivalent.
+4. **Given** a mutant whose run ended in an error or a crash rather than an assertion failure, **When** results are assembled, **Then** it is labelled killed-by-crash and is not counted as evidence that a test would notice the change.
+5. **Given** the feature is not requested, **When** normal verification runs, **Then** mutation analysis does not run at all.
 
 ---
 
 ### User Story 6 - Security scanning is staged so it can be trusted (Priority: P3)
 
-An owner turns on security scanning without drowning in alerts. The first stage only observes and records a baseline; blocking begins only on high-confidence classes, after the false-positive rate is known.
+An owner turns on security scanning without drowning in alerts. A scheduled broad scan records a baseline first; a change-scoped scan reports without blocking; and blocking then begins narrowly — only on rule classes whose baseline exists, and only on findings a provider can confirm.
 
-**Why this priority**: Real value, but the literature's 25–99% false-positive range makes an immediate blocking gate actively harmful — it teaches the owner to ignore it.
+**Why this priority**: Real value, but the reported 25–99% false-positive range makes an immediate blocking gate actively harmful — it teaches the owner to ignore it. The place to block is the one place the signal is near-certain: a credential that works.
 
-**Independent Test**: Run the observer stage on a known-clean project and confirm it blocks nothing and records a baseline; run the blocking stage and confirm it fails on a high-confidence class and passes a clean tree.
+**Independent Test**: Run the observer stage on a known-clean project and confirm it blocks nothing and records a baseline; run the blocking stage and confirm it fails on a confirmed-live credential, does not fail on a pattern-only match, and passes a clean tree.
 
 **Acceptance Scenarios**:
 
 1. **Given** the first stage, **When** findings occur, **Then** nothing blocks and a baseline is recorded with counts by rule.
 2. **Given** the tool reports an internal error, **When** the stage finishes, **Then** it reports "scan failed", never "clean".
-3. **Given** the rule set is not pinned, **When** the scan starts, **Then** it refuses rather than fetching a floating default (a measured failure mode).
+3. **Given** the rule set is not pinned, **When** the scan starts, **Then** it refuses rather than fetching a floating default.
 4. **Given** the project needs network access to resolve dependencies, **When** offline mode is requested, **Then** the network-dependent tier is reported as not-run, not as clean.
-5. **Given** a credential-shaped match that a provider can confirm or deny, **When** the confirmation tier runs, **Then** confirmed matches are labelled live and pattern-only matches are never labelled confirmed.
+5. **Given** a credential-shaped match a provider can confirm, **When** the blocking stage runs with confirmation enabled, **Then** the confirmed-live match fails and the same match without confirmation does not.
+6. **Given** the scheduled broad scan has not run on the main branch, **When** the change-scoped blocking stage is enabled, **Then** it refuses to enable.
 
 ---
 
@@ -185,8 +188,8 @@ An owner learns that a check passing once is not the same as a check that passes
 - **FR-001**: Every verification run MUST report the number of items examined (tests executed, assertions evaluated, criteria checked).
 - **FR-002**: A run examining zero items MUST NOT report success and MUST exit nonzero.
 - **FR-003**: The system MUST distinguish a "skip" state from a pass in its verdict, following the three-state precedent in `scripts/self-gate.sh:1477-1490`.
-- **FR-004**: The system MUST detect a check whose expected value is produced by the code under test, and MUST exclude it from evidence.
-- **FR-005**: Each mandatory check MUST declare a negative control — a known-bad input it is expected to reject — and the control's rejection MUST be reported.
+- **FR-004**: Every check MUST declare whether its expected value is fixed outside the code under test; a check that declares no source, or declares a source inside the code under test, MUST be excluded from evidence and the exclusion reported.
+- **FR-005**: Each mandatory check MUST declare a negative control — a known-bad input it is expected to reject — and the control's rejection MUST be reported. Precedent: the gate's own negative control at `scripts/self-gate.sh:707-727`.
 - **FR-006**: A test-runner exit code indicating "no tests collected" MUST map to the zero-examined state, not to success.
 
 **Criteria tally (US2)**
@@ -199,7 +202,7 @@ An owner learns that a check passing once is not the same as a check that passes
 
 - **FR-010**: Each verification result MUST be appended as a single immutable record; existing records MUST NOT be edited or reordered.
 - **FR-011**: Each record MUST carry a unique identifier, a timestamp, the command executed, its exit code, and a content fingerprint.
-- **FR-012**: Duplicate identifiers MUST fail a check that runs before merge or in CI.
+- **FR-012**: Duplicate identifiers MUST fail a check that runs before merge or in CI. This record shape is the substrate a claim store can reuse (`specs/006-workflow-orchestration/`).
 - **FR-013**: Reading the trail MUST order by timestamp, independent of merge order.
 - **FR-014**: Free-text evidence without an executed command and exit code MUST NOT satisfy a requirement.
 
@@ -213,16 +216,16 @@ An owner learns that a check passing once is not the same as a check that passes
 **Mutation as review (US5)**
 
 - **FR-019**: Mutation analysis MUST be opt-in and MUST be scoped to changed files.
-- **FR-020**: Output MUST be a bounded list of named survivors with location and operator.
-- **FR-021**: No mutation percentage MUST be presented as a pass/fail threshold.
-- **FR-022**: Behaviourally equivalent or unclassified mutants MUST be labelled as such and MUST NOT count as weaknesses.
+- **FR-020**: Output MUST be a bounded list of named candidates with location, operator, and kill status.
+- **FR-021**: A mutation percentage MUST NOT be presented as a pass/fail threshold; a percentage MAY appear only as a non-blocking budget beside the candidate count.
+- **FR-022**: Behaviourally equivalent mutants MUST be labelled equivalent and MUST NOT count as candidates; a mutant neither provably equivalent nor classified MUST be labelled unknown, never equivalent. A trivial-compiler-equivalence pre-filter MUST be applied, and its misses MUST NOT be treated as equivalent — TCE is a partial filter in Python, not a complete one.
 - **FR-023**: A module with no tests MUST report "unmeasured" rather than a ratio.
 
 **Security ladder (US6)**
 
-- **FR-024**: Scanning MUST support an observe-only stage that records a baseline by rule and blocks nothing.
-- **FR-025**: A blocking stage MUST be limited to high-confidence classes and MUST NOT be enabled before a baseline exists.
-- **FR-026**: Rule sets MUST be pinned and committed; an unpinned default MUST be refused.
+- **FR-024**: Scanning MUST support an observe-only stage that records a baseline by rule and blocks nothing, and the baseline MUST come from a scheduled broad scan rather than from the change set alone.
+- **FR-025**: A blocking stage MUST be limited to high-confidence rule classes and to findings a provider has confirmed live; it MUST NOT be enabled before a baseline exists.
+- **FR-026**: Rule sets MUST be pinned and committed; an unpinned default MUST be refused (a floating rule set changes silently, and `--config auto` cannot run with metrics off).
 - **FR-027**: Tool-internal errors MUST NOT be reported as clean.
 - **FR-028**: Network-dependent checks MUST report "not-run" in offline mode, never clean.
 
@@ -243,8 +246,8 @@ existing stories instead of adding a ninth. Source: `docs/research/incorporation
 
 *Change-scoped verification (US4)*
 
-- **FR-033**: A selected run MUST report how many changed lines the executed tests reached, and how many they did not.
-- **FR-034**: A changed-line result MUST NOT be presented as coverage of the file, the module, or the project.
+- **FR-033**: A run MUST report how many changed lines the executed tests reached and how many they did not, and MUST state which coverage profile the figure came from.
+- **FR-034**: A changed-line result MUST NOT be presented as coverage of the file, the module, or the project, and a selected-run result MUST NOT be presented as "no test executes this line" — only a full-suite profile supports that reading.
 
 *Security ladder (US6)*
 
@@ -255,12 +258,29 @@ existing stories instead of adding a ninth. Source: `docs/research/incorporation
 
 - **FR-037**: Where a machine-readable interface description exists, a schema-driven property instance MUST be offered, and its findings MUST name the operation that produced them.
 
+### Requirements added by the independent check (2026-10-22)
+
+Source: `docs/research/spec-vs-research-check-2026-10-22.md`. Each closes a place where the earlier text
+either claimed more than the companion's evidence supports or dropped a mechanism the companion had already
+adopted. They sharpen existing stories rather than adding a ninth.
+
+*Mutation as review (US5)*
+
+- **FR-038**: Kill status MUST distinguish killed-by-assertion from killed-by-crash-or-error; only the former counts as evidence that a test would notice the change.
+- **FR-039**: A faster whole-method (extreme) mutation mode MAY be offered for large change sets; when it is used its output MUST be labelled less precise and MUST NOT replace the default operator-level run.
+
+*Security ladder (US6)*
+
+- **FR-040**: A scheduled broad scan MUST exist and MUST run independently of any change set.
+- **FR-041**: A change-scoped (diff-aware) scan MUST exist and MUST use the same pinned rule set as the broad scan.
+- **FR-042**: The environment-only credential rule MUST be reported as the control for hand-written credentials, and a green scan MUST NOT be reported as satisfying it.
+
 ### Key Entities
 
 - **Verification Result**: one immutable record — identifier, timestamp, what ran, exit code, fingerprint, examined-count, verdict (`PASS`/`FAIL`/`INCOMPLETE`/`NOT-RUN`).
 - **Criteria Tally**: the set of acceptance criteria in a spec, each with evidenced/unproven state and its evidence references.
 - **Change Set**: the files modified relative to a base, from which the selected check set is derived.
-- **Mutant Finding**: file, line, operator, status (survived / killed / equivalent-or-unknown), and whether the module was measurable at all.
+- **Mutant Finding**: file, line, operator, status (survived-candidate / killed-by-assertion / killed-by-crash / equivalent / unknown), and whether the module was measurable at all.
 - **Baseline**: the recorded per-rule finding counts a stage compares against before it may block.
 
 ## Success Criteria *(mandatory)*
@@ -270,27 +290,29 @@ existing stories instead of adding a ninth. Source: `docs/research/incorporation
 - **SC-001**: Across four vacuity fixtures (zero tests, self-referential oracle, skipped section, clean control), **zero** produce a green verdict; the clean control still passes.
 - **SC-002**: **100%** of completion reports contain an `n/m` tally with `m > 0`, or refuse to report.
 - **SC-003**: A hundred simulated parallel-merge rounds produce **zero** lost, duplicated, or order-ambiguous records.
-- **SC-004**: Default verification on a single-file change completes in **≤25%** of the full-suite time (baseline: full gate ≈3.5 minutes).
-- **SC-005**: The blocking security stage is not enabled for any rule class whose measured false-positive baseline has not been recorded.
+- **SC-004**: Default verification on a single-file change completes in **≤25%** of the full-suite time measured by the same command on the same machine, and both numbers are recorded. (The research machine's full gate, `scripts/self-gate.sh --no-e2e`, took ≈3.5 min; a different machine must re-measure.)
+- **SC-005**: The blocking security stage is enabled only after a scheduled broad scan has recorded a per-rule baseline, and never for a rule class whose measured false-positive baseline has not been recorded, nor for a finding no provider confirmed live.
 - **SC-006**: Reliability reporting shows both figures on every run; a deterministic task set yields them **equal**.
 - **SC-007**: Every claim in this feature's evidence trail is either a citation or a measurement reproducible with a recorded command — **zero** unsourced assertions in the research companion.
-- **SC-008**: **100%** of change-scoped runs report changed-line reachability; a change whose new lines no test executes is reported as unexercised, not as verified.
-- **SC-009**: **Zero** pattern-only credential matches are labelled confirmed across the full fixture set.
+- **SC-008**: **100%** of changed-line reports state the coverage profile they came from; a full-suite profile whose new lines no test executes is reported as unexercised, and a selected-run profile never yields the claim that no test executes a line.
+- **SC-009**: **Zero** pattern-only credential matches are labelled confirmed across the full fixture set, and no green scan is reported as satisfying the environment-only credential rule.
+- **SC-010**: Every killed mutant in a report carries a kill status, and **zero** crash-killed mutants are counted as evidence that a test would notice the change.
 
 ## Out of Scope
 
-Deliberately excluded, with reasons recorded in the research companion §10:
+Deliberately excluded, with reasons recorded in the research companion §7, §10 and §11:
 
-- **Model-as-judge *verdicts*** — a model returning pass/fail **as the gate**. Verdicts flip on harmless reordering (~13.6%), which makes it unfit to decide a gate. **This is not a rejection of a reviewer that files findings** for a human to act on (cc-sdd's independent reviewer; SpecWeave's `review` returning `0` ship / `3` fix-first) — different mechanism, different failure mode. That belongs to `specs/006-workflow-orchestration/`, not here.
+- **Model-as-judge *verdicts*** — a model returning pass/fail **as the gate**. A single judge flips its own verdict on repeated identical runs (~13.6% of pairwise preferences change between runs; 28% of questions flip more than 20% of the time), which makes a single verdict unfit to decide a gate. **This is not a rejection of a reviewer that files findings** for a human to act on (cc-sdd's independent reviewer; SpecWeave's `review` returning `0` ship / `3` fix-first) — different mechanism, different failure mode, and `specs/006-workflow-orchestration/` attaches the evidence question to it. That belongs there, not here.
 - **A second spec framework alongside this one** — marker collisions make coexistence unsafe.
 - **Bundled third-party eval frameworks** — the measurement we need is ~30 lines.
-- **Test-to-criterion traceability matrices** — no empirical support found for improved fault detection.
-- **Mutation percentage thresholds** — contradicted by industrial practice and by the equivalent-mutant rate.
-- **Blocking on secret scanning** — vendor-shaped tokens only; a design rule (secrets come from the environment) is the real control.
+- **Test-to-criterion traceability matrices** — no empirical support found for improved fault detection *quality*. The tally in US2 is kept for a different reason: it makes a zero-criteria pass impossible.
+- **Mutation percentage thresholds** — contradicted by industrial practice and by the equivalent-mutant rate. A percentage as a non-blocking budget is allowed (FR-021); as a gate it is not.
+- **LLM / test-aware mutant generation** — Kiele et al. (ESEM 2026) report verified-fault rates of 87.7%/79.1% against mutmut's 4.4%/5.7%, i.e. roughly sixteen times fewer candidates per real finding. Rejected *for this feature* because it needs a model call per mutant and an independent oracle — and the oracle is the thing being built. Recorded so the choice is visible rather than accidental.
+- **Blocking on pattern-only secret matches** — an unconfirmed regex match is not a finding. Blocking is limited to findings a provider confirms live and to rule classes with a recorded baseline (FR-025, FR-035), following the security-gate pattern the research records (`trufflehog … --only-verified --fail`). The environment-only rule is reported as the real control (FR-042) and is not something a scanner can satisfy.
 
 ## Evidence Base
 
-Full citations, measurements, and the five validation rounds: `docs/research/verification-tooling-2026-10.md` §6 (measurements), §10 (validation table and corrections). This spec states *what* and *why*; that document carries the *how we know*.
+Full citations, measurements, and the five validation rounds: `docs/research/verification-tooling-2026-10.md` §6 (measurements), §10 and §11 (validation table and corrections), §12 (corrections made after the independent check, including the secret-scanner denominator and the judge-instability mechanism). This spec states *what* and *why*; that document carries the *how we know*.
 
 ## Assumptions
 
@@ -298,4 +320,5 @@ Full citations, measurements, and the five validation rounds: `docs/research/ver
 - Optional tools remain optional: absence produces `NOT-RUN`/`INCOMPLETE`, never a failure that blocks work on a machine that cannot install them.
 - Downstream projects may use any language; the vacuity guard must be expressible per-runner rather than assuming one test framework.
 - The owner prefers a smaller true signal over a larger noisy one; the staged security ladder and the no-threshold mutation rule both encode this.
+- `scripts/verify` in this repository **was measured** on 2026-10-22 against FR-001/FR-002: `./scripts/verify` printed 256 `ok` lines, one skipped section, `SELF-GATE: INCOMPLETE`, and exited 0. The verdict block (`scripts/self-gate.sh:1477-1491`) has no examined-count guard and prints no total, so FR-001/FR-002 are **not** implemented at the kit's own gate; repairing that is the first implementation task, not an assumption of current correctness.
 - `scripts/verify` in this repository has **not yet** been measured against FR-001/FR-002; establishing that baseline is the first implementation task, not an assumption of current correctness.
