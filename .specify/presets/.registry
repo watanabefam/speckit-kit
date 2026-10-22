@@ -2,9 +2,9 @@
   "schema_version": "1.0",
   "presets": {
     "spec-driven-development": {
-      "version": "1.14.0",
+      "version": "1.15.0",
       "source": "local",
-      "manifest_hash": "sha256:7123077135498aca07f54d8818a6f1ba66abe126a93bd75da12ddbe452251f09",
+      "manifest_hash": "sha256:aada2e08d052f6b29cbad2651f0915bbd0f7063026f4a24f76b8ed83c52205b2",
       "enabled": true,
       "priority": 10,
       "registered_commands": {
@@ -18,7 +18,7 @@
         ]
       },
       "registered_skills": {},
-      "installed_at": "2026-10-20T15:25:11.534928+00:00"
+      "installed_at": "2026-10-22T12:25:31.722650+00:00"
     }
   }
 }

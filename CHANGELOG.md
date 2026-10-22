@@ -5,6 +5,109 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 The preset version lives in `preset/preset.yml` and is what `specify preset info` reports.
 
+## [1.16.0] — 2026-10-22
+
+### Added — a green result must be earned (spec 005)
+
+`./scripts/verify` now runs through `bin/speckit-verify`. It loads `.specify/verify.json`, runs each
+check's declared negative control **before** the check, maps a runner's "collected nothing" exit code
+to a non-pass, refuses a check whose oracle sits inside the code under test, appends one immutable
+record to `.specify/ledger.jsonl`, and prints `PASS` / `FAIL` / `INCOMPLETE` with an `examined=`
+count and an `n/m` criteria tally.
+
+- `bin/speckit-verify` — change-scoped selection, adapters for pytest/jest/cargo/go/make/schemathesis,
+  the criteria tally, changed-line provenance, opt-in mutation candidates, and the ledger record.
+- `bin/speckit-ledger` — `append` (O_APPEND + flock + fsync; refuses a record with no exit code or a
+  credential-shaped command), `read` (ordered by `at`, `id`, not by append order), `verify`
+  (duplicate ids, rewritten history).
+- `bin/speckit-security` — `observe` / `changed` / `block` over a pinned rule set; only a
+  confirmed-live credential on a rule class with a recorded baseline can block.
+- `evals/run-passk.py` — pass@1, empirical pass^k, the constant-p bound, and the caveat that makes
+  the comparison honest.
+- Change-scoped selection falls back to every check when a shared or configuration file changes
+  (`conftest.py`, `pyproject.toml`, lockfiles, the manifest itself; overridable with
+  `selection.select_all_on`), because a file-glob cannot bound the effect of a file every test
+  reads. The report states `fallback:` and why. A private module still selects narrowly.
+- `evals/measure-sc004.py` and `docs/evidence/sc-004-timing-2026-10-22.md` — the SC-004 timing:
+  interleaved pairs, one warmup discarded, three or more suite sizes, both ratio statistics. The
+  ratio is 0.235 at six checks and 0.063 at 24, but 0.273 at five and 0.444 at three, so the
+  measured claim carries that floor rather than asserting 25% unconditionally.
+- `speckit-init` seeds `.specify/verify.json` (`--no-manifest` opts out) and upgrades a byte-identical
+  generated `scripts/verify` to the dispatcher; `speckit-check` reports ledger drift;
+  `speckit-resume --criteria` prints the tally; `speckit-uninit` removes what it installed.
+- The gate's verdict prints `examined=N assertion(s)`.
+
+### Fixed — two claims the implementation could not keep
+
+- The plan's property **P-012** asserted the constant-p bound is always ≤ the empirical pass^k.
+  Jensen's inequality holds for the *population* figures; at small n the estimates can reverse it
+  (n=5, c=4, k=2: bound 0.64 > empirical 0.60). The harness prints both and names the reversal.
+- `contracts/verify-cli.md` showed a `34/42` tally over FR ids, but criteria are the spec's `SC-xxx`
+  rows (`n/11` here); the example is corrected, and `--criteria` is defined as the SC tally.
+
+**Not measured:** SC-004 (default verification ≤ 25% of full-suite time). No timing fixture is
+recorded, so the gap is left visible in the criteria tally rather than claimed.
+
+## [1.15.0] — 2026-10-22
+
+### Added — every loop states what "done" means before it starts
+
+Three steps could iterate, and none of them said when to stop. `plan` said research should be
+"bounded" without defining the bound; `implement` ran until green; `converge` stopped on a severity
+floor without saying what a converged finding set does and does not establish. The gap is not
+cosmetic: a second audit pass over a repair that had already been called settled turned up five
+defects, and the worst of them — a duplicated pair of mutually exclusive assumption bullets — was
+invisible to every mechanical check the kit had.
+
+The rule now lives in two places, split by role. The `/speckit` entry point carries the policy,
+because it applies at every step; the step prepends carry the mechanism, because that is where the
+loop actually runs.
+
+- **A criterion declared before round 1** — what counts as a round, what counts as a new finding,
+  and how many consecutive empty rounds mean stop (two by default). A criterion chosen after seeing
+  the yield can always be fitted to it, including the criterion that says "I have converged".
+- **Bounded convergence, reported as such.** The honest output is "nothing new within these
+  sources, seeds, criteria and date" — the form established for citation snowballing and required
+  by systematic-review reporting, where the limits travel with the result. "I found nothing" is a
+  claim about the search, never about the world.
+- **Coverage is not depth.** Qualitative coding reaches code-level saturation around nine
+  interviews and *meaning* saturation at sixteen to twenty-four. "No new findings" certifies the
+  lenses you used, not that the hard issues were examined; `converge` now has to say which it
+  reached.
+- **Ratification steps are not iterated.** The constitution, a decision record and an approval gate
+  are one-shot by design; re-running one until it agrees with itself is how an artifact gets
+  smoothed to fit rather than ratified.
+
+### Added — the acceptance check is not the agent's to edit
+
+`implement` ran until green without saying that green can be manufactured. It is measured, not
+hypothetical: 31% of 251 passing SWE-Agent patches were judged suspicious on manual audit, and on
+SWE-bench Verified 55% of 112 passing patches were; agents have been observed altering expected
+values, suppressing exceptions and skipping assertions; and under deliberately contradictory tests
+one benchmark's agents chose the test over the specification on 54–76% of tasks. Giving them a
+legitimate "this cannot be satisfied" route cut that to 9%, which is why the rule requires
+escalating an unsatisfiable requirement instead of quietly satisfying the test.
+
+The rule also states the limit of the evidence behind it: mutation score detects a weakened oracle
+but is only weakly correlated with real-fault detection once suite size is controlled, so a falling
+score is a warning, not a verdict.
+
+### Changed — one claim softened, because the evidence did not support it
+
+`converge` previously leaned on independent review being better than self-review. The direction is
+plausible and the kit still asks for a reviewer in a context that did not do the work, but no
+measured head-to-head was found, perspective-based reading's reported advantage is confounded with
+time-on-task (identical cost per defect), and a 30-subject replication found no difference between
+perspectives. The rule now says what the evidence supports — a loop pays when the acceptance signal
+comes from outside — and does not claim an effect size that was never measured.
+
+### Not added, deliberately
+
+No defect-rate threshold. No verified normative source mandates one: IEEE 1028 frames inspection
+as entry/exit criteria but the exit clause body is paywalled, and CMMI requires an *organisation's*
+declared criteria to be met, not a universal rate. The kit therefore requires a declared criterion
+and a declared boundary rather than a number — which is also the only form it could honestly test.
+
 ## [1.14.0] — 2026-10-21
 
 ### Fixed — a skipped section could read as a passing one

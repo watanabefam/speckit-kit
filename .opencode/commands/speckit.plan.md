@@ -106,6 +106,31 @@ must confirm it, not assume it; the wrong assumption surfaces at implementation,
 - **Record disagreement, do not average it.** When sources conflict, note the conflict and the
   boundary between them; the boundary is often the real answer.
 
+#### Stop the loop on a criterion you declared first
+
+Multi-round research needs a stopping rule, and the rule has to exist **before** round 1. A
+criterion chosen after seeing what a round returned can always be made to fit that round.
+
+- **Declare three things up front**: what counts as a round, what counts as a *new* finding, and
+  how many consecutive empty rounds mean stop — two by default.
+- **Stop on decision-relevance, not exhaustiveness.** A round is empty when nothing it produced
+  could change a decision, a threshold, or a line of the artifact. A fresh citation for a point
+  already settled is not progress.
+- **Report the boundary, not completeness.** The honest result of a converged search is "nothing
+  new within *these* sources, seeds, criteria and date". That is the form established for citation
+  snowballing — iterate until an iteration yields no new records, and report the seed set and the
+  limits alongside the result. "I found nothing" is a claim about your search, never about the
+  world.
+- **Log every round**: what you searched, what it returned, what you dismissed and why. An
+  unlogged empty round cannot be told apart from no round at all.
+- **Report non-convergence as the outcome.** "Not converged after N rounds; this is still open" is
+  a legitimate result and the one the user has to see. Never convert a cap you hit into a claim
+  that you converged.
+
+Do not run the loop as self-critique alone. A model revising its own work with no external signal
+to accept or reject the revision measurably *degrades* output it had already got right; the gain
+comes from the check, not from the repetition.
+
 Record findings in `research.md`; carry whatever remains open into the plan's Open Questions.
 
 ### Stop at the approval gate

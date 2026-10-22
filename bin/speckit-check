@@ -161,6 +161,26 @@ check_one() {
     line "${D}skip${X}  no checks recorded in AGENTS.md, so no scripts/verify expected"
   fi
 
+  # 4b-ii. Verification manifest and evidence trail (005 FR-012) ------------------
+  # Duplicate ids and a rewritten history are the two ways a trail stops being evidence, so the
+  # checker reports them rather than trusting the file to be append-only because it says so.
+  if [ -f "$root/.specify/verify.json" ]; then
+    line "${G}ok${X}    verification manifest present (.specify/verify.json)"
+    if [ -f "$root/.specify/ledger.jsonl" ]; then
+      if [ -x "$root/bin/speckit-ledger" ] \
+         && (cd "$root" && bin/speckit-ledger verify >/dev/null 2>&1); then
+        line "${G}ok${X}    ledger: no duplicate ids, append-only history"
+      else
+        line "${Y}DIFF${X}  ledger integrity check failed (duplicate ids or a rewritten history)"
+        drift=1
+      fi
+    else
+      line "${D}skip${X}  no ledger yet — nothing has been verified in this project"
+    fi
+  else
+    line "${D}skip${X}  no verification manifest — the recorded command sequence is in use"
+  fi
+
   # 4c. Spec Kit's own view of the integration ----------------------------------
   # `specify integration status` is the native oracle. Its "warning" is EXPECTED when the
   # preset prepends to six commands, so the checker must distinguish that (exactly those

@@ -1,0 +1,203 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/watanabefam/speckit-kit/specs/005-verification-integrity/contracts/ledger-record.schema.json",
+  "title": "speckit verification ledger record",
+  "description": "One line of .specify/ledger.jsonl. Immutable once appended; a status change is a new record, never an edit.",
+  "type": "object",
+  "required": [
+    "id",
+    "at",
+    "mode",
+    "command",
+    "exit",
+    "fingerprint",
+    "examined",
+    "verdict"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique across the file. A duplicate fails speckit-ledger verify (FR-012)."
+    },
+    "at": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "Z$",
+      "description": "RFC 3339 UTC. The sort key, with id as tie-break (FR-013)."
+    },
+    "mode": {
+      "enum": [
+        "changed",
+        "all",
+        "criteria",
+        "mutation",
+        "security",
+        "property"
+      ],
+      "description": "What was asked for, so a selected run can never be read as a full one (FR-017)."
+    },
+    "command": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The command line that was run. A record without one is refused (FR-014)."
+    },
+    "exit": {
+      "type": "integer",
+      "description": "The command's exit code. Required; free-text evidence never satisfies a requirement (FR-014)."
+    },
+    "fingerprint": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "description": "sha256 over the HEAD tree plus a hash of the working-tree diff."
+    },
+    "examined": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Items examined across all checks (FR-001)."
+    },
+    "verdict": {
+      "enum": [
+        "PASS",
+        "FAIL",
+        "INCOMPLETE",
+        "NOT-RUN"
+      ],
+      "description": "Computed by the engine. PASS with examined=0 is invalid (FR-002)."
+    },
+    "checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "status"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "pass",
+              "fail",
+              "no-items",
+              "skipped",
+              "not-run",
+              "vacuous",
+              "flaky"
+            ]
+          },
+          "examined": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "note": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "selection": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "What was selected, by check id or changed path (FR-017). Absent in --all."
+    },
+    "profile": {
+      "type": "object",
+      "required": [
+        "source"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "enum": [
+            "full",
+            "selected",
+            "none"
+          ]
+        },
+        "path": {
+          "type": "string"
+        }
+      },
+      "description": "Provenance of the changed-line figure. A selected profile never supports 'no test executes this' (FR-033/FR-034)."
+    },
+    "criteria": {
+      "type": "object",
+      "required": [
+        "evidenced",
+        "total"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "evidenced": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "total": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "gaps": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "description": "n/m tally with named gaps. total=0 is recordable only on a refused run (FR-008); the engine never emits verdict=PASS with total=0."
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "verdict": {
+            "const": "PASS"
+          }
+        },
+        "required": [
+          "verdict"
+        ]
+      },
+      "then": {
+        "properties": {
+          "examined": {
+            "minimum": 1
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "criteria": {
+            "type": "object",
+            "required": [
+              "total"
+            ]
+          }
+        },
+        "required": [
+          "criteria"
+        ]
+      },
+      "then": {
+        "properties": {
+          "criteria": {
+            "properties": {
+              "total": {
+                "minimum": 0
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

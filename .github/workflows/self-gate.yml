@@ -64,13 +64,20 @@ jobs:
       # one on PATH. On a GitHub macOS runner `bash` is Homebrew's 5.x, whereas
       # an adopter's Mac has 3.2.57 at /bin/bash - so the PATH bash cannot see
       # the bug this step exists to catch.
-      - name: Parse installer under macOS system bash 3.2
+      - name: Parse installer and engine under macOS system bash 3.2
         if: runner.os == 'macOS'
         run: |
           /bin/bash --version | head -1
           /bin/bash -n bin/speckit-init
+          /bin/bash -n bin/speckit-uninit
+          /bin/bash -n bin/speckit-check
+          /bin/bash -n bin/speckit-resume
+          /bin/bash -n bin/speckit-verify
+          /bin/bash -n bin/speckit-ledger
+          /bin/bash -n bin/speckit-security
+          /bin/bash -n scripts/verify
           /bin/bash scripts/self-gate.sh --no-e2e
-          echo "system bash parsed the installer and passed the static gate"
+          echo "system bash parsed the installer and the 005 engine, and passed the static gate"
 
       - name: Static gate (no E2E)
         if: runner.os != 'macOS'

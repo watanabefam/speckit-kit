@@ -6,7 +6,7 @@ license: MIT
 metadata:
   category: development
   audience: developers
-  version: "1.1.1"
+  version: "1.2.0"
 ---
 
 # Spec-Driven Development
@@ -35,10 +35,10 @@ skill that fires about 60% of the time.
 | Step | The command carries |
 | --- | --- |
 | `/speckit.specify` | workflow selection, product reasoning, ask only what matters, record assumptions instead of inventing requirements |
-| `/speckit.plan` | inspect before proposing, the sweep for re-enumerated sets, the repository is evidence, research the unknowns from primary sources (bounded), stop at the approval gate |
+| `/speckit.plan` | inspect before proposing, the sweep for re-enumerated sets, the repository is evidence, research the unknowns from primary sources with the stopping criterion declared before round 1, stop at the approval gate |
 | `/speckit.tasks` | every task traces to a requirement, one verifiable outcome, scope control |
-| `/speckit.implement` | approved work only, continuous execution with an execution budget, evidence before "done", tick tasks honestly, repair the earliest artifact on contradiction |
-| `/speckit.converge` | evidence-based completion, no rounding up to green, verify declared boundaries, independent review by a non-author context, stress the asserted properties, handoff discipline |
+| `/speckit.implement` | approved work only, continuous execution with an execution budget, the acceptance check is not yours to edit, evidence before "done", tick tasks honestly, repair the earliest artifact on contradiction |
+| `/speckit.converge` | evidence-based completion, no rounding up to green, verify declared boundaries, independent review by a non-author context, coverage is not depth, stress the asserted properties, handoff discipline |
 
 Read the command you are about to run. **If this skill and a command ever disagree, the command
 wins** — it is the one that actually applies.
@@ -109,6 +109,9 @@ These apply at every step; the project's working-agreements states them in full.
   creep. The two failure modes are symmetric and both silent.
 - **Evidence** — an agent that reports success without verification is worse than one that reports
   a limitation, because the limitation is invisible.
+- **Stopping rules** — "iterate until it is done" has no detector behind it, so it cannot be told
+  apart from having run out of ideas. A criterion declared before the first round is the only form
+  of "done" that is allowed to fail, and a rule that cannot fail is not a check.
 
 ## References
 

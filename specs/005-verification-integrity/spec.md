@@ -13,7 +13,7 @@
 **Workflow:** full spec-driven · **Companion:** `docs/research/verification-tooling-2026-10.md` (informative; five validation rounds, §10 and §11 authoritative, §12 the corrections made after the independent check)
 **Normative sections:** User Scenarios & Testing, Requirements, Success Criteria.
 **Revised**: 2026-10-22 after `docs/research/spec-vs-research-check-2026-10-22.md` (findings C-01, H-01…H-03, M-01…M-08, L-01…L-05).
-**Relationship to 004:** `004-reliability-hardening` repaired the *kit's own* gate (its recursion, its skips, its ledger trust). This feature addresses a different subject: whether a **downstream project's** verification report means anything. Where the two overlap, 004's three-state verdict (`scripts/self-gate.sh:1477-1490`) is the precedent to copy, not to change.
+**Relationship to 004:** `004-reliability-hardening` repaired the *kit's own* gate (its recursion, its skips, its ledger trust). This feature addresses a different subject: whether a verification report means anything — first at the kit's own `./scripts/verify`, then at any **downstream project's**. Where the two overlap, 004's three-state verdict (`scripts/self-gate.sh:1477-1490`) is the precedent to copy, not to change.
 
 ## Problem / Opportunity
 
@@ -114,6 +114,7 @@ An owner runs the expensive check on changed files and gets a short, bounded lis
 3. **Given** a mutant that is byte-identical to the original after compilation, **When** results are assembled, **Then** it is labelled equivalent and not counted as a candidate, and a mutant that is neither provably equivalent nor classified is labelled unknown rather than equivalent.
 4. **Given** a mutant whose run ended in an error or a crash rather than an assertion failure, **When** results are assembled, **Then** it is labelled killed-by-crash and is not counted as evidence that a test would notice the change.
 5. **Given** the feature is not requested, **When** normal verification runs, **Then** mutation analysis does not run at all.
+6. **Given** a large change set and the extreme whole-method mode, **When** it runs, **Then** its output is labelled less precise, and it does not replace or overwrite an operator-level result for the same tasks.
 
 ---
 
@@ -297,6 +298,7 @@ adopted. They sharpen existing stories rather than adding a ninth.
 - **SC-008**: **100%** of changed-line reports state the coverage profile they came from; a full-suite profile whose new lines no test executes is reported as unexercised, and a selected-run profile never yields the claim that no test executes a line.
 - **SC-009**: **Zero** pattern-only credential matches are labelled confirmed across the full fixture set, and no green scan is reported as satisfying the environment-only credential rule.
 - **SC-010**: Every killed mutant in a report carries a kill status, and **zero** crash-killed mutants are counted as evidence that a test would notice the change.
+- **SC-011**: A reader can tell from the report alone whether a mutant count came from the extreme mode; **zero** extreme-mode results are presented as interchangeable with an operator-level run of the same tasks.
 
 ## Out of Scope
 
@@ -320,5 +322,4 @@ Full citations, measurements, and the five validation rounds: `docs/research/ver
 - Optional tools remain optional: absence produces `NOT-RUN`/`INCOMPLETE`, never a failure that blocks work on a machine that cannot install them.
 - Downstream projects may use any language; the vacuity guard must be expressible per-runner rather than assuming one test framework.
 - The owner prefers a smaller true signal over a larger noisy one; the staged security ladder and the no-threshold mutation rule both encode this.
-- `scripts/verify` in this repository **was measured** on 2026-10-22 against FR-001/FR-002: `./scripts/verify` printed 256 `ok` lines, one skipped section, `SELF-GATE: INCOMPLETE`, and exited 0. The verdict block (`scripts/self-gate.sh:1477-1491`) has no examined-count guard and prints no total, so FR-001/FR-002 are **not** implemented at the kit's own gate; repairing that is the first implementation task, not an assumption of current correctness.
-- `scripts/verify` in this repository has **not yet** been measured against FR-001/FR-002; establishing that baseline is the first implementation task, not an assumption of current correctness.
+- `scripts/verify` in this repository **was measured** on 2026-10-22 against FR-001/FR-002: `./scripts/verify` printed `ok` lines for every section — 263 at that measurement, 265 once the stopping-rule assertions landed the same day — with no failures, no skips, `SELF-GATE: PASS`, and exited 0 — with **no count of what was examined** printed anywhere. The verdict block (`scripts/self-gate.sh:1477-1491`) prints only `PASS`/`FAIL`, and its `INCOMPLETE` path leaves the exit code at 0 unless `--strict`; an earlier run the same day, with one section skipped, printed `SELF-GATE: INCOMPLETE` and still exited 0. So FR-001/FR-002 are **not** implemented at the kit's own gate; repairing that is the first implementation task, not an assumption of current correctness.

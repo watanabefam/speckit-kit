@@ -171,6 +171,7 @@ against the previous version, then confirm the previous version remains readable
 3. **Given** work in flight, **When** its plan is inspected, **Then** in-flight change plans are distinguishable from settled specifications.
 4. **Given** an amendment contradicts an earlier one, **When** both are read, **Then** the contradiction is detectable rather than silently resolved by file order.
 5. **Given** two specifications in the same batch claim the same responsibility, **When** the batch is checked, **Then** the overlap is reported before either is worked.
+6. **Given** a specification that still uses a deprecated or avoided term, **When** the terminology check runs in CI, **Then** it exits nonzero and names the file and the replacement, and it exits 0 once the term is gone.
 
 ---
 

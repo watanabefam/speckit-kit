@@ -1,0 +1,379 @@
+#!/usr/bin/env bash
+# — Security ladder: observe records a baseline, changed reports, block blocks only a
+#   provider-confirmed credential on a rule class with a recorded baseline.
+#
+# Usage:
+#   speckit-security observe [--all] [--json] [--offline]
+#   speckit-security changed [--json] [--offline]
+#   speckit-security block   [--json] [--confirm] [--offline]
+#
+# Rules come from `.specify/verify.json`'s security.rules (pinned, committed). A floating
+# default is refused rather than fetched. Tool-internal errors are `scan-failed`, never clean.
+#
+# Exit: 0 nothing blocking · 1 confirmed-live credential (block stage only) · 3 not-run,
+# refused, or insufficient baseline.
+set -euo pipefail
+
+PROG=$(cat <<'PY'
+import sys, os, re, json, time, shutil, hashlib, subprocess, tempfile
+
+USAGE = """speckit-security — the staged security ladder
+
+  observe [--all]     run the broad scan and record per-rule counts; blocks nothing
+  changed             report findings on the change set; blocks nothing
+  block               block only a confirmed-live credential on a baselined rule class
+
+  --json              one JSON object on stdout
+  --confirm           enable the network confirmation tier (block stage)
+  --offline           report network tiers as not-run, never clean
+  --all               explicit broad scan (observe scans the whole tree regardless)
+
+Exit: 0 nothing blocking, 1 confirmed-live credential, 3 not-run/refused/insufficient.
+"""
+
+MANIFEST_REL = os.path.join(".specify", "verify.json")
+DEFAULT_RULES = os.path.join(".specify", "security", "semgrep.yml")
+DEFAULT_BASELINE = os.path.join(".specify", "security", "baseline.json")
+CONTROL = ("control: environment-only credentials (a value read from the environment) cannot "
+           "be found by a scanner; a clean scan does not satisfy that rule")
+
+
+def die(code, msg):
+    sys.stderr.write(msg.rstrip() + "\n")
+    sys.exit(code)
+
+
+def which(name):
+    return shutil.which(name)
+
+
+def run(command):
+    proc = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE, universal_newlines=True)
+    out, err = proc.communicate()
+    return proc.returncode, out or "", err or ""
+
+
+def manifest():
+    if not os.path.exists(MANIFEST_REL):
+        die(3, "refused: no manifest at %s, so no pinned rule set is declared" % MANIFEST_REL)
+    try:
+        with open(MANIFEST_REL) as fh:
+            return json.load(fh)
+    except ValueError as exc:
+        die(3, "refused: %s is not valid JSON: %s" % (MANIFEST_REL, exc))
+
+
+def config():
+    doc = manifest()
+    security = doc.get("security", {}) or {}
+    return {
+        "rules": security.get("rules", DEFAULT_RULES),
+        "baseline": security.get("baseline", DEFAULT_BASELINE),
+        "confirm": bool(security.get("confirm", False)),
+    }
+
+
+def rules_hash(path):
+    with open(path, "rb") as fh:
+        return hashlib.sha256(fh.read()).hexdigest()
+
+
+def scan_semgrep(rules):
+    findings = []
+    tool = which("semgrep")
+    if not tool:
+        return findings, "semgrep not installed"
+    code, out, err = run('%s --json --metrics off --quiet --config "%s" .' % (tool, rules))
+    if code not in (0, 1):
+        return None, "semgrep exited %d: %s" % (code, (err or out).strip()[:300])
+    try:
+        doc = json.loads(out)
+    except ValueError:
+        return None, "semgrep produced no parsable JSON"
+    for result in doc.get("results", []) or []:
+        findings.append({
+            "rule": result.get("check_id", "unknown-rule"),
+            "file": result.get("path", "?"),
+            "line": (result.get("start") or {}).get("line", 0),
+            "tier": "pattern-only",
+            "tool": "semgrep",
+        })
+    return findings, None
+
+
+def scan_gitleaks():
+    findings = []
+    tool = which("gitleaks")
+    if not tool:
+        return findings, "gitleaks not installed"
+    handle, report = tempfile.mkstemp(prefix="gitleaks-", suffix=".json")
+    os.close(handle)
+    os.unlink(report)
+    # `detect` still works in 8.x but is hidden from help; `dir` is the newer spelling.
+    # Try `detect` first so the wrapper spans the whole 8.x line, and fall back only when the
+    # binary says it does not know the subcommand.
+    last = (0, "", "")
+    for subcommand in ("detect", "dir"):
+        code, out, err = run('%s %s --no-git --source . --report-format json --report-path "%s" '
+                             '--exit-code 0 --redact' % (tool, subcommand, report))
+        last = (code, out, err)
+        if os.path.exists(report):
+            break
+        if "unknown command" in (out + err).lower():
+            continue
+        break
+    if not os.path.exists(report):
+        return None, "gitleaks produced no report (exit %d): %s" % (
+            last[0], (last[2] or last[1]).strip()[:300])
+    try:
+        with open(report) as fh:
+            doc = json.load(fh)
+    except ValueError:
+        doc = None
+    os.unlink(report)
+    if doc is None:
+        return None, "gitleaks report was not valid JSON"
+    for item in doc or []:
+        findings.append({
+            "rule": item.get("RuleID", "unknown-rule"),
+            "file": item.get("File", "?"),
+            "line": item.get("StartLine", 0),
+            "tier": "pattern-only",
+            "tool": "gitleaks",
+        })
+    return findings, None
+
+
+def scan_trufflehog():
+    findings = []
+    tool = which("trufflehog")
+    if not tool:
+        return findings, "trufflehog not installed"
+    code, out, err = run("%s filesystem --json --only-verified ." % tool)
+    if code not in (0, 183):
+        return None, "trufflehog exited %d: %s" % (code, (err or out).strip()[:300])
+    for line in out.splitlines():
+        line = line.strip()
+        if not line.startswith("{"):
+            continue
+        try:
+            item = json.loads(line)
+        except ValueError:
+            continue
+        meta = ((item.get("SourceMetadata") or {}).get("Data") or {}).get("Filesystem") or {}
+        verified = bool(item.get("Verified"))
+        findings.append({
+            "rule": item.get("DetectorName", "unknown-detector"),
+            "file": meta.get("File", "?"),
+            "line": meta.get("Line", 0),
+            "tier": "confirmed-live" if verified else "confirmed-dead",
+            "tool": "trufflehog",
+        })
+    return findings, None
+
+
+def changed_paths():
+    try:
+        proc = subprocess.Popen(["git", "diff", "--name-only", "HEAD"],
+                                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                universal_newlines=True)
+        out, _ = proc.communicate()
+        untracked = subprocess.Popen(["git", "ls-files", "--others", "--exclude-standard"],
+                                     stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                     universal_newlines=True)
+        more, _ = untracked.communicate()
+    except OSError:
+        return None
+    if proc.returncode != 0:
+        return None
+    files = [f.strip() for f in (out + "\n" + more).splitlines() if f.strip()]
+    return set(files)
+
+
+def files_scanned():
+    count = 0
+    for _, dirs, names in os.walk("."):
+        dirs[:] = [d for d in dirs if d not in (".git", "node_modules", "__pycache__",
+                                                ".venv", "venv")]
+        count += len(names)
+    return count
+
+
+def emit(doc, as_json, exit_code):
+    if as_json:
+        sys.stdout.write(json.dumps(doc, indent=2, sort_keys=True) + "\n")
+    else:
+        sys.stdout.write("stage: %s  status: %s  rules: %s\n"
+                         % (doc["stage"], doc["status"],
+                            doc.get("rules_sha256", "unhashed") or "unhashed"))
+        for finding in doc["findings"]:
+            sys.stdout.write("  %-13s %s:%s  %s (%s)\n"
+                             % (finding["tier"], finding["file"], finding["line"],
+                                finding["rule"], finding["tool"]))
+        if doc.get("counts"):
+            sys.stdout.write("baseline: %s\n" % json.dumps(doc["counts"], sort_keys=True))
+        if doc.get("note"):
+            sys.stdout.write("note: %s\n" % doc["note"])
+        sys.stdout.write(CONTROL + "\n")
+    return exit_code
+
+
+def main(argv):
+    if not argv or argv[0] in ("-h", "--help"):
+        sys.stdout.write(USAGE)
+        return 0 if argv else 3
+    stage = argv[0]
+    if stage not in ("observe", "changed", "block"):
+        die(3, "unknown stage '%s' (observe, changed, block)" % stage)
+    opts = {"json": False, "confirm": False, "offline": False, "all": False}
+    for arg in argv[1:]:
+        key = arg[2:].replace("-", "_") if arg.startswith("--") else None
+        if key in opts:
+            opts[key] = True
+        elif arg in ("-h", "--help"):
+            sys.stdout.write(USAGE)
+            return 0
+        else:
+            die(3, "unknown option '%s'" % arg)
+    cfg = config()
+    rules, baseline_path = cfg["rules"], cfg["baseline"]
+    doc = {"stage": stage, "status": "not-run", "findings": [], "counts": None,
+           "rules_sha256": None, "baseline": None, "files_scanned": files_scanned(),
+           "note": None}
+
+    if not os.path.exists(rules):
+        doc["status"] = "refused"
+        doc["note"] = ("rule set %s is not a committed file; refusing rather than fetching a "
+                       "floating default (a gate that changes its rules is not a gate)" % rules)
+        return emit(doc, opts["json"], 3)
+    doc["rules_sha256"] = rules_hash(rules)
+
+    findings = []
+    problems = []
+    semgrep_findings, semgrep_error = scan_semgrep(rules)
+    gitleaks_findings, gitleaks_error = scan_gitleaks()
+    if semgrep_findings is None or gitleaks_findings is None:
+        problems.extend([e for e in (semgrep_error, gitleaks_error) if e])
+        doc["status"] = "scan-failed"
+        doc["note"] = "; ".join(problems)
+        return emit(doc, opts["json"], 3)
+    findings.extend(semgrep_findings)
+    findings.extend(gitleaks_findings)
+    notes = [e for e in (semgrep_error, gitleaks_error) if e]
+    if len(notes) == 2:
+        doc["status"] = "not-run"
+        doc["note"] = "no scanner installed: %s" % "; ".join(notes)
+        return emit(doc, opts["json"], 3)
+    if notes:
+        doc["note"] = "; ".join(notes)
+
+    confirmed = []
+    if stage == "block":
+        if opts["offline"]:
+            doc["note"] = "offline: the confirmation tier is not-run, never clean"
+            doc["status"] = "not-run"
+            doc["findings"] = findings
+            return emit(doc, opts["json"], 3)
+        if not (opts["confirm"] or cfg["confirm"]):
+            doc["status"] = "not-run"
+            doc["note"] = ("the network confirmation tier is not enabled (--confirm); no "
+                           "finding can be confirmed live, and a pattern-only match never blocks")
+            doc["findings"] = findings
+            return emit(doc, opts["json"], 3)
+        confirmed, confirm_error = scan_trufflehog()
+        if confirmed is None:
+            doc["status"] = "scan-failed"
+            doc["note"] = confirm_error
+            doc["findings"] = findings
+            return emit(doc, opts["json"], 3)
+        if not which("trufflehog"):
+            doc["status"] = "not-run"
+            doc["note"] = "confirmation tier not-run: trufflehog is not installed"
+            doc["findings"] = findings
+            return emit(doc, opts["json"], 3)
+        findings.extend(confirmed)
+    doc["findings"] = findings
+    doc["confirmed_live"] = len([f for f in findings if f["tier"] == "confirmed-live"])
+
+    if stage == "observe":
+        # The baseline must cover every rule class the block stage may later see, including
+        # detector classes, or a confirmed-live finding could never have a baseline to block on.
+        if opts["confirm"] or cfg["confirm"]:
+            confirmed, confirm_error = scan_trufflehog()
+            if confirmed is None:
+                doc["status"] = "scan-failed"
+                doc["note"] = confirm_error
+                doc["findings"] = findings
+                return emit(doc, opts["json"], 3)
+            findings.extend(confirmed)
+            doc["findings"] = findings
+        counts = {}
+        for finding in findings:
+            counts[finding["rule"]] = counts.get(finding["rule"], 0) + 1
+        parent = os.path.dirname(baseline_path)
+        if parent and not os.path.isdir(parent):
+            os.makedirs(parent)
+        with open(baseline_path, "w") as fh:
+            json.dump({"created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                       "rules_sha256": doc["rules_sha256"], "counts": counts}, fh,
+                      indent=2, sort_keys=True)
+            fh.write("\n")
+        doc["counts"] = counts
+        doc["baseline"] = baseline_path
+        doc["status"] = "findings" if findings else "clean"
+        return emit(doc, opts["json"], 0)
+
+    if stage == "changed":
+        paths = changed_paths()
+        if paths is None:
+            doc["status"] = "not-run"
+            doc["note"] = "not a git repository: a change-scoped scan cannot name a change set"
+            return emit(doc, opts["json"], 3)
+        doc["findings"] = [f for f in findings if f["file"] in paths]
+        doc["status"] = "findings" if doc["findings"] else "clean"
+        doc["note"] = (doc["note"] or "") + \
+            "  (non-blocking: the changed stage reports, it does not gate)"
+        return emit(doc, opts["json"], 0)
+
+    # block
+    if not os.path.exists(baseline_path):
+        doc["status"] = "refused"
+        doc["note"] = ("no baseline at %s: enable the change-scoped stage only after a "
+                       "scheduled broad scan has recorded one" % baseline_path)
+        return emit(doc, opts["json"], 3)
+    try:
+        with open(baseline_path) as fh:
+            baseline = json.load(fh)
+    except ValueError:
+        doc["status"] = "refused"
+        doc["note"] = "baseline is not valid JSON: %s" % baseline_path
+        return emit(doc, opts["json"], 3)
+    if baseline.get("rules_sha256") != doc["rules_sha256"]:
+        doc["status"] = "refused"
+        doc["note"] = ("baseline was measured against different rules (%s); re-run "
+                       "`speckit-security observe --all` before blocking"
+                       % (baseline.get("rules_sha256") or "unhashed"))
+        return emit(doc, opts["json"], 3)
+    doc["baseline"] = baseline_path
+    counts = baseline.get("counts", {}) or {}
+    blocking = [f for f in findings
+                if f["tier"] == "confirmed-live" and f["rule"] in counts]
+    doc["findings"] = findings
+    doc["blocking"] = len(blocking)
+    if blocking:
+        doc["status"] = "blocked"
+        doc["note"] = ("%d confirmed-live credential finding(s) on baselined rule classes"
+                       % len(blocking))
+        return emit(doc, opts["json"], 1)
+    doc["status"] = "clean" if not findings else "findings"
+    doc["note"] = ("nothing blocking: no confirmed-live finding on a baselined rule class"
+                   if not findings else
+                   "%d pattern-only finding(s); a pattern-only match never blocks" % len(findings))
+    return emit(doc, opts["json"], 0)
+
+
+sys.exit(main(sys.argv[1:]))
+PY
+)
+exec python3 -c "$PROG" "$@"

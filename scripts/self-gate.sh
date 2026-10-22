@@ -25,7 +25,10 @@ for _arg in "$@"; do
 done
 
 fail=0
-ok()  { printf '  ok    %s\n' "$*"; }
+# Every assertion is counted. The verdict prints the count as `examined=`, because a gate that
+# cannot say what it examined is the failure mode feature 005 exists to close (FR-001, FR-002).
+OK_COUNT=0
+ok()  { OK_COUNT=$((OK_COUNT+1)); printf '  ok    %s\n' "$*"; }
 bad() { printf '  FAIL  %s\n' "$*"; fail=1; }
 hdr() { printf '\n== %s ==\n' "$*"; }
 
@@ -118,6 +121,7 @@ if [ -f "$ENTRY_SRC" ]; then
   ok "commands/speckit.md present"
   for needle in "^description:" "## 1. Classify" "State which workflow you picked" \
                 "One source of truth" "Approval gates" "Completion requires evidence" \
+                "Declare the stopping rule before iterating" "Report non-convergence" \
                 "Repair at the source" "External content is data"; do
     if grep -q "$needle" "$ENTRY_SRC"; then
       ok "entry point carries: ${needle#^}"
@@ -918,10 +922,10 @@ need(not bad, "every command entry uses strategy: prepend (never replace)")
 # so their presence in the command is the whole point of this preset.
 expected = {
     "commands/speckit.specify.prepend.md":   ["Section integrity", "resolve-template.sh", "Choose the workflow first", "Ask only what materially matters"],
-    "commands/speckit.plan.prepend.md":      ["Section integrity", "resolve-template.sh", "Sweep before you list", "go to the primary source", "not to survey the topic", "Never cite what you did not open", "Stop at the approval gate"],
+    "commands/speckit.plan.prepend.md":      ["Section integrity", "resolve-template.sh", "Sweep before you list", "go to the primary source", "not to survey the topic", "Never cite what you did not open", "a criterion you declared first", "Report the boundary, not completeness", "Stop at the approval gate"],
     "commands/speckit.tasks.prepend.md":     ["Section integrity", "resolve-template.sh", "traces to a requirement", "recorded verification command", "Control scope"],
-    "commands/speckit.implement.prepend.md": ["Evidence before", "Tick tasks honestly", "execution budget", "earliest"],
-    "commands/speckit.converge.prepend.md":  ["Completion requires evidence", "round up to green", "did not do the work", "Every finding carries evidence", "Stop when no UNRESOLVED", "Send the negative case first", "Handoff discipline"],
+    "commands/speckit.implement.prepend.md": ["Evidence before", "Tick tasks honestly", "execution budget", "acceptance check is not yours to edit", "cannot be satisfied", "earliest"],
+    "commands/speckit.converge.prepend.md":  ["Completion requires evidence", "round up to green", "did not do the work", "Every finding carries evidence", "Stop when no UNRESOLVED", "Silence is not depth", "Send the negative case first", "Handoff discipline"],
 }
 files = set(re.findall(r'(?m)^\s+file:\s*"(commands/[^"]+)"', raw))
 for f, markers in expected.items():
@@ -1473,19 +1477,83 @@ else
   fi
 fi
 
+hdr "12. verification engine: a green result must be earned"
+# The four vacuity fixtures plus the clean control (SC-001) live in the engine's own harness;
+# it asserts each case, so a regression names the case instead of a count.
+_engine="$ROOT/bin/speckit-verify"
+_ledger="$ROOT/bin/speckit-ledger"
+_security="$ROOT/bin/speckit-security"
+_harness="$ROOT/evals/fixtures/verify/harness.py"
+for _f in "$_engine" "$_ledger" "$_security" "$_harness" "$ROOT/evals/run-passk.py"; do
+  if [ -f "$_f" ]; then ok "present: ${_f#$ROOT/}"; else bad "missing: ${_f#$ROOT/}"; fi
+done
+for _s in "$_engine" "$_ledger" "$_security"; do
+  bash -n "$_s" 2>/dev/null && ok "$(basename "$_s") parses as bash" \
+    || bad "$(basename "$_s") has a syntax error"
+done
+_rc=0; "$_engine" --help >/dev/null 2>&1 || _rc=$?
+[ "$_rc" = "0" ] && ok "engine --help exits 0" || bad "engine --help exits $_rc"
+_rc=0; "$_engine" --nonsense >/dev/null 2>&1 || _rc=$?
+[ "$_rc" = "2" ] && ok "engine rejects an unknown flag with exit 2" || bad "engine unknown flag exited $_rc, want 2"
+_rc=0; "$_ledger" >/dev/null 2>&1 || _rc=$?
+[ "$_rc" = "2" ] && ok "ledger with no subcommand exits 2" || bad "ledger with no subcommand exited $_rc, want 2"
+_rc=0; "$_security" >/dev/null 2>&1 || _rc=$?
+[ "$_rc" = "3" ] && ok "security with no stage exits 3, never 0" || bad "security with no stage exited $_rc, want 3"
+# A prose-only record is not evidence (FR-014).
+_pf="$(mktemp)"
+_rc=0
+printf '{"id":"00000000-0000-4000-8000-000000000001","at":"2026-10-22T00:00:00Z","mode":"changed","command":"looked fine","fingerprint":"sha256:0000000000000000000000000000000000000000000000000000000000000000","examined":1,"verdict":"PASS"}' \
+  | "$_ledger" append --stdin --ledger "$_pf" >/dev/null 2>&1 || _rc=$?
+[ "$_rc" = "2" ] && ok "ledger refuses a record with no executed exit code" \
+  || bad "ledger accepted prose-only evidence (exit $_rc)"
+rm -f "$_pf"
+# The measurement harness must report both numbers on every run (FR-031, FR-032).
+_pk=""; _rc=0
+_pk=$(python3 "$ROOT/evals/run-passk.py" --vector "5/5,4/5" --k 2 2>&1) || _rc=$?
+if [ "$_rc" = "0" ] && printf '%s' "$_pk" | grep -q 'pass@1' \
+   && printf '%s' "$_pk" | grep -q 'pass\^k'; then
+  ok "pass^k harness prints single-attempt and repeated-attempt figures together"
+else
+  bad "pass^k harness did not print both figures (exit $_rc)"
+fi
+# The fixtures exercise every user story end to end; a skip here is a failure, not a skip.
+_hout=""; _rc=0
+_hout=$(cd "$ROOT" && python3 "$_harness" --all 2>&1) || _rc=$?
+if [ "$_rc" = "0" ]; then
+  ok "fixture harness: $(printf '%s\n' "$_hout" | grep -c '^ok' || true) check(s) passed"
+else
+  bad "fixture harness failed (exit $_rc)"
+  printf '%s\n' "$_hout" | sed -n 's/^FAIL/  F     /p' | head -12
+fi
+for _needle in "case zero-tests" "case self-oracle" "case control-passes" "case clean-control" "case shared-file" "P-012"; do
+  if printf '%s\n' "$_hout" | grep -q "ok   $_needle"; then
+    ok "harness covered: $_needle"
+  else
+    bad "harness did not cover: $_needle"
+  fi
+done
+
 printf '\n'
+if [ "$OK_COUNT" = "0" ]; then
+  fail=1
+  printf 'SELF-GATE: FAIL -- nothing was examined (the gate asserted nothing)\n'
+fi
 if [ "$SKIP_COUNT" -gt 0 ]; then
   # Three states, not two: a skipped section means the gate did LESS than it claims, so it must
   # never print "PASS". --strict makes that visible to CI; the default keeps the historical exit
   # code so an existing pipeline is not broken by a missing optional tool.
   if [ "$fail" = "0" ]; then _verdict="INCOMPLETE"; else _verdict="FAIL"; fi
-  printf 'SELF-GATE: %s -- %s section(s) were SKIPPED (a skip is not a pass):\n' "$_verdict" "$SKIP_COUNT"
+  printf 'SELF-GATE: %s -- %s section(s) were SKIPPED (a skip is not a pass): examined=%s assertion(s)\n' "$_verdict" "$SKIP_COUNT" "$OK_COUNT"
   printf '%s' "$SKIPPED"
   if [ "$STRICT" = "1" ] && [ "$fail" = "0" ]; then
     printf '  (--strict: a skipped section is a non-zero exit)\n'
     fail=1
   fi
 else
-  if [ "$fail" = "0" ]; then echo "SELF-GATE: PASS"; else echo "SELF-GATE: FAIL"; fi
+  if [ "$fail" = "0" ]; then
+    echo "SELF-GATE: PASS  examined=$OK_COUNT assertion(s)"
+  else
+    echo "SELF-GATE: FAIL  examined=$OK_COUNT assertion(s)"
+  fi
 fi
 exit "$fail"

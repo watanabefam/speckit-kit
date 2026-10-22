@@ -3,7 +3,7 @@ schema_version: "1.0"
 preset:
   id: "spec-driven-development"
   name: "Spec-Driven Development Addenda"
-  version: "1.14.0"
+  version: "1.15.0"
   description: "Appends problem framing, traceability, approval boundaries and verification sections to the core spec, plan and task templates without replacing them."
   author: "watanabefam"
   repository: "https://github.com/watanabefam/speckit-kit"
@@ -45,7 +45,7 @@ provides:
     - type: "command"
       name: "speckit.plan"
       file: "commands/speckit.plan.prepend.md"
-      description: "Prepends a section-integrity instruction so appended template sections are not dropped from plan.md; also carries the repository sweep, repository-as-evidence, the bounded research rule, and the approval gate"
+      description: "Prepends a section-integrity instruction so appended template sections are not dropped from plan.md; also carries the repository sweep, repository-as-evidence, the primary-source research rule with a stopping criterion declared before round 1 and a bounded-convergence report, and the approval gate"
       strategy: "prepend"
 
     - type: "command"
@@ -61,13 +61,13 @@ provides:
     - type: "command"
       name: "speckit.implement"
       file: "commands/speckit.implement.prepend.md"
-      description: "Prepends the execution rules: approved work only, continuous execution with an execution budget, evidence before done, honest task ticking, repair the earliest artifact on contradiction"
+      description: "Prepends the execution rules: approved work only, continuous execution with an execution budget, the acceptance check is not the agent's to edit, evidence before done, honest task ticking, repair the earliest artifact on contradiction"
       strategy: "prepend"
 
     - type: "command"
       name: "speckit.converge"
       file: "commands/speckit.converge.prepend.md"
-      description: "Prepends the convergence rules: evidence-based completion, no rounding up to green, verify declared boundaries, independent review by a non-author context, stress the asserted properties, handoff discipline"
+      description: "Prepends the convergence rules: evidence-based completion, no rounding up to green, verify declared boundaries, independent review by a non-author context, coverage-is-not-depth, stress the asserted properties, handoff discipline"
       strategy: "prepend"
 
     - type: "template"

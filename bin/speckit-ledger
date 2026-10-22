@@ -1,0 +1,358 @@
+#!/usr/bin/env bash
+# — Verification ledger: append-only records, ordered reads, integrity checks.
+#
+# Usage:
+#   speckit-ledger append --stdin [--ledger PATH]        one immutable line; refuses an invalid record
+#   speckit-ledger read [--json] [--ledger PATH]         ordered by (at, id), never by append order
+#   speckit-ledger verify [--ledger PATH]                duplicate ids, malformed lines, non-append history
+#
+# The file is .specify/ledger.jsonl by default. There is no rewrite path: an append opens
+# O_APPEND, takes an exclusive lock, writes exactly one newline-terminated line, fsyncs, closes.
+# Exit: 0 ok · 1 integrity failure · 2 malformed input, nothing written.
+set -euo pipefail
+
+# The program is passed as an argument, not on stdin: `append --stdin` must be able to read
+# the record from stdin, and a heredoc would have consumed it.
+PROG=$(cat <<'PY'
+import sys, os, re, json, fcntl, subprocess
+
+DEFAULT_LEDGER = os.path.join(".specify", "ledger.jsonl")
+
+USAGE = """speckit-ledger — the verification evidence trail
+
+  speckit-ledger append --stdin [--ledger PATH]
+        Append one JSON record (one line) read from stdin. Refuses a record that is
+        missing required fields, carries a duplicate id, or whose command looks like
+        it contains a credential. Prints the record id on success.
+
+  speckit-ledger read [--json] [--ledger PATH]
+        Print the trail ordered by (at, id). Notes on stderr when the file's append
+        order is not chronological, because merge order is not chronology.
+
+  speckit-ledger verify [--ledger PATH]
+        Exit 1 on a duplicate id, a record that claims PASS with examined=0, or a
+        history that is not append-only (git reports deletions in this file).
+        Exit 2 on a malformed line. Exit 0 otherwise.
+
+Exit codes: 0 ok, 1 integrity failure, 2 malformed input or usage.
+"""
+
+MODES = ("changed", "all", "criteria", "mutation", "security", "property")
+VERDICTS = ("PASS", "FAIL", "INCOMPLETE", "NOT-RUN")
+STATUSES = ("pass", "fail", "no-items", "skipped", "not-run", "vacuous", "flaky")
+PROFILES = ("full", "selected", "none")
+REQUIRED = ("id", "at", "mode", "command", "exit", "fingerprint", "examined", "verdict")
+UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
+AT_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$")
+FP_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
+SECRET_RES = [
+    re.compile(r"gh[pousr]_[A-Za-z0-9]{20,}"),
+    re.compile(r"AKIA[0-9A-Z]{16}"),
+    re.compile(r"sk_live_[0-9a-zA-Z]{10,}"),
+    re.compile(r"xox[baprs]-[A-Za-z0-9-]{10,}"),
+    re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----"),
+    re.compile(r"[a-z][a-z0-9+.-]*://[^/\s:@]+:[^/\s@]+@"),
+    re.compile(r"(?i)\b(password|passwd|secret|token|api[_-]?key)\s*=\s*\S{8,}"),
+]
+
+
+def die(code, msg):
+    sys.stderr.write(msg.rstrip() + "\n")
+    sys.exit(code)
+
+
+def is_int(v):
+    return isinstance(v, int) and not isinstance(v, bool)
+
+
+def validate(obj):
+    """Every rule the record contract states, checked in one place."""
+    errors = []
+    if not isinstance(obj, dict):
+        return ["record is not a JSON object"]
+    for field in REQUIRED:
+        if field not in obj:
+            errors.append("missing required field '%s'" % field)
+    if errors:
+        return errors
+    extra = [k for k in obj if k not in REQUIRED + ("checks", "selection", "profile", "criteria")]
+    if extra:
+        errors.append("unknown field(s): %s" % ", ".join(sorted(extra)))
+    if not isinstance(obj["id"], str) or not UUID_RE.match(obj["id"]):
+        errors.append("id is not a UUID")
+    if not isinstance(obj["at"], str) or not AT_RE.match(obj["at"]):
+        errors.append("at is not RFC 3339 UTC with a trailing Z")
+    if obj["mode"] not in MODES:
+        errors.append("mode must be one of %s" % ", ".join(MODES))
+    if not isinstance(obj["command"], str) or not obj["command"].strip():
+        errors.append("command must be a non-empty string (free text is not evidence)")
+    if not is_int(obj["exit"]):
+        errors.append("exit must be an integer")
+    if not isinstance(obj["fingerprint"], str) or not FP_RE.match(obj["fingerprint"]):
+        errors.append("fingerprint must be sha256:<64 hex>")
+    if not is_int(obj["examined"]) or obj["examined"] < 0:
+        errors.append("examined must be an integer >= 0")
+    if obj["verdict"] not in VERDICTS:
+        errors.append("verdict must be one of %s" % ", ".join(VERDICTS))
+    if obj["verdict"] == "PASS" and is_int(obj["examined"]) and obj["examined"] < 1:
+        errors.append("PASS with examined=0 is invalid: a green result must have examined something")
+    if "checks" in obj:
+        if not isinstance(obj["checks"], list):
+            errors.append("checks must be an array")
+        else:
+            for i, chk in enumerate(obj["checks"]):
+                if not isinstance(chk, dict):
+                    errors.append("checks[%d] is not an object" % i)
+                    continue
+                if not isinstance(chk.get("id"), str) or not chk.get("id"):
+                    errors.append("checks[%d].id must be a non-empty string" % i)
+                if chk.get("status") not in STATUSES:
+                    errors.append("checks[%d].status must be one of %s" % (i, ", ".join(STATUSES)))
+                if "examined" in chk and (not is_int(chk["examined"]) or chk["examined"] < 0):
+                    errors.append("checks[%d].examined must be an integer >= 0" % i)
+    if "selection" in obj and not isinstance(obj["selection"], list):
+        errors.append("selection must be an array")
+    if "profile" in obj:
+        prof = obj["profile"]
+        if not isinstance(prof, dict) or prof.get("source") not in PROFILES:
+            errors.append("profile.source must be one of %s" % ", ".join(PROFILES))
+    if "criteria" in obj:
+        crit = obj["criteria"]
+        if not isinstance(crit, dict):
+            errors.append("criteria must be an object")
+        else:
+            for field in ("evidenced", "total"):
+                if not is_int(crit.get(field)) or crit[field] < 0:
+                    errors.append("criteria.%s must be an integer >= 0" % field)
+            if "gaps" in crit and not isinstance(crit["gaps"], list):
+                errors.append("criteria.gaps must be an array")
+            if is_int(crit.get("total")) and crit["total"] == 0 and obj["verdict"] == "PASS":
+                errors.append("a refused tally (total=0) cannot be recorded as PASS")
+    return errors
+
+
+def read_lines(path):
+    """Return (records, malformed) where malformed is [(lineno, message)]."""
+    records, malformed = [], []
+    if not os.path.exists(path):
+        return records, malformed
+    with open(path, "r") as fh:
+        for lineno, line in enumerate(fh, 1):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                obj = json.loads(line)
+            except ValueError as exc:
+                malformed.append((lineno, "not JSON: %s" % exc))
+                continue
+            errors = validate(obj)
+            if errors:
+                malformed.append((lineno, "; ".join(errors)))
+                continue
+            records.append(obj)
+    return records, malformed
+
+
+def sort_key(rec):
+    return (rec["at"], rec["id"])
+
+
+def cmd_append(argv):
+    path, use_stdin = DEFAULT_LEDGER, False
+    raw = None
+    i = 0
+    while i < len(argv):
+        arg = argv[i]
+        if arg == "--stdin":
+            use_stdin = True
+        elif arg == "--ledger":
+            i += 1
+            if i >= len(argv):
+                die(2, "append: --ledger needs a path")
+            path = argv[i]
+        elif arg == "--json":
+            i += 1
+            if i >= len(argv):
+                die(2, "append: --json needs a record")
+            raw = argv[i]
+        elif arg in ("-h", "--help"):
+            sys.stdout.write(USAGE)
+            return 0
+        else:
+            die(2, "append: unknown argument '%s'" % arg)
+        i += 1
+    if use_stdin and raw is None:
+        raw = sys.stdin.read()
+    if raw is None:
+        die(2, "append: no record given (use --stdin or --json)")
+    try:
+        obj = json.loads(raw)
+    except ValueError as exc:
+        die(2, "append: refused, not valid JSON: %s" % exc)
+    errors = validate(obj)
+    if errors:
+        die(2, "append: refused, invalid record:\n  - " + "\n  - ".join(errors))
+    for pattern in SECRET_RES:
+        if pattern.search(obj["command"]):
+            die(2, "append: refused, command looks like it carries a credential; "
+                   "pass secrets through the environment instead")
+    records, _ = read_lines(path)
+    seen = set(r["id"] for r in records)
+    if obj["id"] in seen:
+        die(2, "append: refused, id %s already exists (a record is never rewritten; "
+               "a new result is a new record)" % obj["id"])
+    line = json.dumps(obj, sort_keys=True, separators=(",", ":")) + "\n"
+    parent = os.path.dirname(path)
+    if parent and not os.path.isdir(parent):
+        os.makedirs(parent)
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o644)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        data = line.encode("utf-8")
+        written = 0
+        while written < len(data):
+            written += os.write(fd, data[written:])
+        os.fsync(fd)
+    finally:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+        finally:
+            os.close(fd)
+    sys.stdout.write(obj["id"] + "\n")
+    return 0
+
+
+def cmd_read(argv):
+    path, as_json = DEFAULT_LEDGER, False
+    i = 0
+    while i < len(argv):
+        arg = argv[i]
+        if arg == "--json":
+            as_json = True
+        elif arg == "--ledger":
+            i += 1
+            if i >= len(argv):
+                die(2, "read: --ledger needs a path")
+            path = argv[i]
+        elif arg in ("-h", "--help"):
+            sys.stdout.write(USAGE)
+            return 0
+        else:
+            die(2, "read: unknown argument '%s'" % arg)
+        i += 1
+    if not os.path.exists(path):
+        die(2, "read: no ledger at %s (nothing has been recorded here)" % path)
+    records, malformed = read_lines(path)
+    if malformed:
+        for lineno, msg in malformed:
+            sys.stderr.write("ledger:%d: %s\n" % (lineno, msg))
+        die(2, "read: %d malformed line(s); refusing to read a trail it cannot trust" % len(malformed))
+    ordered = sorted(records, key=sort_key)
+    if records and [r["id"] for r in records] != [r["id"] for r in ordered]:
+        skew = sum(1 for a, b in zip(records, ordered) if a["id"] != b["id"])
+        sys.stderr.write(
+            "note: %d record(s) were appended out of chronological order; reading by (at, id), "
+            "not by file order (merge order is not chronology)\n" % skew)
+    if as_json:
+        sys.stdout.write(json.dumps(ordered, indent=2, sort_keys=True) + "\n")
+        return 0
+    sys.stdout.write("%-24s %-38s %-10s %8s %s\n" % ("at", "id", "verdict", "examined", "mode"))
+    for rec in ordered:
+        sys.stdout.write("%-24s %-38s %-10s %8d %s\n" % (
+            rec["at"], rec["id"], rec["verdict"], rec["examined"], rec["mode"]))
+    return 0
+
+
+def git_deleted_lines(path):
+    """Lines removed from `path` across its history; None means unknown."""
+    try:
+        out = subprocess.Popen(
+            ["git", "log", "--numstat", "--format=", "--", path],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+        text, _ = out.communicate()
+    except OSError:
+        return None
+    if out.returncode != 0:
+        return None
+    total = 0
+    for line in text.splitlines():
+        parts = line.split("\t")
+        if len(parts) < 3:
+            continue
+        deleted = parts[1]
+        if deleted.isdigit():
+            total += int(deleted)
+    return total
+
+
+def cmd_verify(argv):
+    path = DEFAULT_LEDGER
+    i = 0
+    while i < len(argv):
+        arg = argv[i]
+        if arg == "--ledger":
+            i += 1
+            if i >= len(argv):
+                die(2, "verify: --ledger needs a path")
+            path = argv[i]
+        elif arg in ("-h", "--help"):
+            sys.stdout.write(USAGE)
+            return 0
+        else:
+            die(2, "verify: unknown argument '%s'" % arg)
+        i += 1
+    if not os.path.exists(path):
+        die(2, "verify: no ledger at %s" % path)
+    records, malformed = read_lines(path)
+    problems, integrity = [], False
+    for lineno, msg in malformed:
+        problems.append("line %d: %s" % (lineno, msg))
+    seen, dupes = set(), []
+    for rec in records:
+        if rec["id"] in seen:
+            dupes.append(rec["id"])
+        seen.add(rec["id"])
+    if dupes:
+        problems.append("duplicate id(s): %s" % ", ".join(sorted(set(dupes))))
+        integrity = True
+    for rec in records:
+        if rec["verdict"] == "PASS" and rec["examined"] == 0:
+            problems.append("record %s claims PASS with examined=0" % rec["id"])
+            integrity = True
+    deleted = git_deleted_lines(path)
+    if deleted:
+        problems.append("history is not append-only: %d line(s) deleted from %s" % (deleted, path))
+        integrity = True
+    if problems:
+        for problem in problems:
+            sys.stdout.write("FAIL  %s\n" % problem)
+        return 1 if integrity else 2
+    sys.stdout.write("ok    %d record(s), no duplicate ids, append-only history\n" % len(records))
+    if deleted is None:
+        sys.stdout.write("note  git history unavailable; append-only ratio not measured\n")
+    return 0
+
+
+def main(argv):
+    if not argv:
+        sys.stderr.write(USAGE)
+        return 2
+    if argv[0] in ("-h", "--help", "help"):
+        sys.stdout.write(USAGE)
+        return 0
+    sub, rest = argv[0], argv[1:]
+    if sub == "append":
+        return cmd_append(rest)
+    if sub == "read":
+        return cmd_read(rest)
+    if sub == "verify":
+        return cmd_verify(rest)
+    sys.stderr.write("speckit-ledger: unknown subcommand '%s'\n\n%s" % (sub, USAGE))
+    return 2
+
+
+sys.exit(main(sys.argv[1:]))
+PY
+)
+exec python3 -c "$PROG" "$@"

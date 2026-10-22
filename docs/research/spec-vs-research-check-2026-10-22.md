@@ -298,6 +298,32 @@ own correction sections — earlier text left intact, per their convention). The
 sequential in file order, every FR under a story, every story with ≥3 acceptance scenarios, no stale figures
 (`8 of 8`, `452 lines`, `harmless reordering`, `weakest of the four` all absent).
 
+### Second pass — the repairs re-audited
+
+A single verification pass over one's own repair is the failure this document exists to catch, so the repaired
+specs were put through the same checks again as an independent pass. It found five things the first pass had
+missed, all in the repair itself:
+
+1. **005 Assumptions carried two contradictory bullets** — one saying `scripts/verify` *was measured* and one
+   saying it *had not yet been measured* against FR-001/FR-002. The stale bullet was deleted and the surviving
+   measurement re-run: 263 `ok`, 0 failures, 0 skips, `SELF-GATE: PASS`, exit 0, **no examined total printed**;
+   and the `INCOMPLETE` path (`scripts/self-gate.sh:1481-1491`) leaves the exit code at 0 unless `--strict`. Until
+   this pass, that bullet also carried an earlier figure (256 `ok`, one skip, `INCOMPLETE`) without saying which
+   run it described.
+2. **FR-039 had no acceptance scenario and no success criterion** — a `MUST` that nothing could check. US5 gained
+   scenario 6 and SC-011 now measures it, taking 005 to 11 SCs.
+3. **006 FR-040 (terminology) had no scenario either.** US5 gained scenario 6 with the exit-code behaviour.
+4. **The plan and its own contract disagreed on the flag form** (`--security=STAGE` vs `--security block`) and
+   neither said what `block` does without `--confirm`. All three artifacts now use `--security STAGE`, and
+   `block` without `--confirm` refuses with exit 3 rather than blocking on a pattern match (FR-025).
+5. **The plan stated "under 300 ms" as if measured.** It is now labelled a design target with no benchmark
+   behind it yet.
+
+The counts above are the audit-resolution snapshot; after this pass 005 has 11 SCs. Re-verified afterwards:
+42/11 in 005 and 40/11 in 006, ids contiguous in file order, plan section-integrity `all 44 required sections
+present, in template order`, JSON Schemas unchanged and still rejecting the six negative fixtures, and the
+project gate green (263 `ok`, `SELF-GATE: PASS`).
+
 **Still open, deliberately:** the 25–99% range's primary source (M-02) is blocked on a paywalled PDF. It no
 longer supports any requirement, so it does not block the plan.
 

@@ -57,6 +57,12 @@ So:
 - **Prefer the deterministic check.** Where a criterion reduces to a program — a test, a gate, a
   lint — run that instead of asking a model to judge it. It is cheaper, and it cannot be talked out
   of its answer.
+- **Silence is not depth.** Finding no new defects establishes *coverage* — that the lenses you
+  used found nothing more. It does not establish that the hard or deep issues were examined:
+  qualitative-coding studies place code-level saturation well before *meaning* saturation. Say
+  which one you reached, and do not let a quiet reviewer stand in for the second.
+- **Name the boundary of a converged review.** "No findings within these passes, these lenses and
+  this scope" is the claim you can defend. "No findings, therefore correct" is not.
 
 ### Stress the properties the change asserts
 

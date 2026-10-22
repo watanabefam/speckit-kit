@@ -14,14 +14,52 @@
 # conversation is what makes a run resumable after compaction.
 #
 # Usage:  speckit-resume <spec-dir>
-# Output: "RESUME T003"  |  "COMPLETE"
-# Exit:   0 normally, 2 if tasks.md is missing
+#         speckit-resume --criteria <spec-dir>      print only the n/m criteria tally
+# Output: "RESUME T003"  |  "COMPLETE"  |  "<spec>  n/m evidenced; gaps: ..."
+# Exit:   0 normally, 2 if tasks.md is missing (or a cited criterion id is unknown),
+#         3 if the spec declares no acceptance criteria (005 FR-008)
 set -euo pipefail
 
+CRITERIA=0
+if [ "${1:-}" = "--criteria" ]; then CRITERIA=1; shift; fi
 SPEC="${1:-}"
 if [ -z "$SPEC" ]; then
-  echo "usage: speckit-resume <spec-dir>" >&2
+  echo "usage: speckit-resume [--criteria] <spec-dir>" >&2
   exit 2
+fi
+
+if [ "$CRITERIA" = "1" ]; then
+  python3 - "$SPEC" <<'PY'
+import os, re, sys
+spec_dir = sys.argv[1]
+spec = os.path.join(spec_dir, "spec.md")
+if not os.path.exists(spec):
+    sys.stderr.write("no spec.md in %s\n" % spec_dir)
+    sys.exit(2)
+with open(spec) as fh:
+    text = fh.read()
+ids = ["SC-%s" % n for n in sorted(set(re.findall(r"\*\*SC-(\d{3})\*\*", text)))]
+if not ids:
+    sys.stderr.write("%s declares no acceptance criteria (SC-xxx); completion cannot be "
+                     "reported\n" % spec)
+    sys.exit(3)
+progress = os.path.join(spec_dir, "progress.md")
+cited = set()
+if os.path.exists(progress):
+    with open(progress) as fh:
+        # A citation is an explicit [SC-003]: a prose mention of an id is not evidence.
+        cited = set(re.findall(r"\[(SC-\d{3})\]", fh.read()))
+unknown = sorted(cited - set(ids))
+if unknown:
+    sys.stderr.write("%s cites criterion id(s) the spec does not declare: %s\n"
+                     % (progress, ", ".join(unknown)))
+    sys.exit(2)
+evidenced = [i for i in ids if i in cited]
+gaps = [i for i in ids if i not in cited]
+print("%s  %d/%d evidenced; gaps: %s"
+      % (spec, len(evidenced), len(ids), ", ".join(gaps) if gaps else "none"))
+PY
+  exit 0
 fi
 TASKS="$SPEC/tasks.md"
 LEDGER="$SPEC/progress.md"

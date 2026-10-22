@@ -107,3 +107,11 @@ It checks that the permission boundary holds, that `/speckit.quick` leaves no sp
 and that an impossible task makes the run **stop** instead of claiming success. It **spends model
 calls**, which is why it is not automatic. Add `--fake` to run the same checks against a scripted
 agent with no model at all — that is what CI does.
+
+## Verification you can trust
+
+`./scripts/verify` now tells you what it examined. On a fresh install it reports `INCOMPLETE` — not
+because anything is broken, but because the seeded test check has no negative `control` yet. Add one
+(a command that must fail when the behaviour is removed) to `.specify/verify.json` and the check
+becomes evidence. `bin/speckit-ledger read` shows the trail; `bin/speckit-ledger verify` fails on a
+duplicate id or a rewritten line.

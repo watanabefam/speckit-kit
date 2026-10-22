@@ -1,0 +1,1113 @@
+#!/usr/bin/env bash
+# — Verification engine: run declared checks, count what they examined, print a verdict.
+#
+# `scripts/verify` is the entry point adopters use; this is what it dispatches to. The engine
+# loads .specify/verify.json, selects checks for the change set, runs each check's negative
+# control before the check, folds the outcomes into PASS / FAIL / INCOMPLETE / NOT-RUN, appends
+# one immutable record to .specify/ledger.jsonl and prints the report.
+#
+# Exit: 0 PASS · 1 FAIL · 2 usage or configuration error · 3 INCOMPLETE or NOT-RUN.
+set -euo pipefail
+SPECKIT_BIN="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+export SPECKIT_BIN
+
+# The program is passed as an argument, not on stdin: the mutation and security stages read
+# worker output, and a heredoc would have consumed stdin.
+PROG=$(cat <<'PY'
+import sys, os, re, io, json, subprocess, hashlib, shutil, time, tokenize, ast, tempfile
+import uuid
+
+USAGE = """speckit-verify — run declared checks and report what was examined
+
+  scripts/verify [options]
+
+  (no options)            change-scoped: select checks by git diff, name the selection
+  --all                   run every check in the manifest (the full-suite mode)
+  --base REF              diff base for selection (default: merge-base with main/master)
+  --coverage PATH         consume a coverage.py JSON report for the changed-line section
+  --profile full|selected provenance of that report; required with --coverage
+  --criteria              print only the n/m criteria tally; exit 3 when m is 0
+  --mutation              run the mutation stage on changed Python files (opt-in)
+  --extreme               with --mutation: whole-method mode, labelled less precise
+  --security observe|changed|block
+                          run the security ladder at that rung
+  --confirm               with --security block: enable the network confirmation tier
+  --offline               with --security: report network tiers as not-run
+  --spec PATH             the feature spec for the criteria tally (default: .specify/feature.json)
+  --json                  print one JSON object: {record, report}
+  --no-ledger             print the report without appending a record (never yields PASS)
+  --strict                accepted for compatibility; INCOMPLETE already exits 3
+  -h, --help
+
+Exit: 0 PASS · 1 FAIL · 2 usage/config · 3 INCOMPLETE/NOT-RUN.
+
+A check is evidence only if it declares an oracle outside the code under test, and only after
+its declared negative control has failed. A test check with no control is vacuous, not evidence.
+"""
+
+MANIFEST_REL = os.path.join(".specify", "verify.json")
+LEDGER_REL = os.path.join(".specify", "ledger.jsonl")
+KINDS = ("test", "lint", "typecheck", "build", "property", "schema", "mutation", "security")
+RUNNERS = ("pytest", "jest", "cargo", "go", "make", "schemathesis", "command")
+ORACLES = ("spec", "fixture", "declared", "implementation")
+STATUSES = ("pass", "fail", "no-items", "skipped", "not-run", "vacuous", "flaky")
+ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
+MUTATION_OPERATORS = [
+    ("ROR", "==", "!="), ("ROR", "!=", "=="), ("ROR", "<=", "<"), ("ROR", "<", "<="),
+    ("ROR", ">=", ">"), ("ROR", ">", ">="), ("LCR", "and", "or"), ("LCR", "or", "and"),
+    ("AOR", "+", "-"), ("AOR", "-", "+"), ("AOR", "*", "/"), ("AOR", "/", "*"),
+    ("CRT", "True", "False"), ("CRT", "False", "True"),
+]
+OPERATOR_MAP = dict((old, (name, new)) for name, old, new in MUTATION_OPERATORS)
+
+
+def die(code, msg):
+    sys.stderr.write(msg.rstrip() + "\n")
+    sys.exit(code)
+
+
+def warn(msg):
+    sys.stderr.write(msg.rstrip() + "\n")
+
+
+# ---------------------------------------------------------------- arguments
+
+def parse_args(argv):
+    opts = {
+        "all": False, "strict": False, "json": False, "criteria": False, "mutation": False,
+        "extreme": False, "confirm": False, "offline": False, "no_ledger": False,
+        "coverage": None, "profile": None, "security": None, "base": None, "spec": None,
+        "help": False,
+    }
+    valued = {"--coverage": "coverage", "--profile": "profile", "--security": "security",
+              "--base": "base", "--spec": "spec"}
+    i = 0
+    while i < len(argv):
+        arg = argv[i]
+        if arg in ("-h", "--help"):
+            opts["help"] = True
+        elif arg in valued:
+            i += 1
+            if i >= len(argv):
+                die(2, "%s needs a value" % arg)
+            opts[valued[arg]] = argv[i]
+        elif arg.startswith("--"):
+            key = arg[2:].replace("-", "_")
+            if key not in opts:
+                die(2, "unknown option '%s' (see --help)" % arg)
+            opts[key] = True
+        else:
+            die(2, "unexpected argument '%s' (see --help)" % arg)
+        i += 1
+    if opts["profile"] not in (None, "full", "selected"):
+        die(2, "--profile must be full or selected")
+    if opts["coverage"] and not opts["profile"]:
+        die(2, "--coverage needs --profile full or --profile selected; guessing provenance is the defect")
+    if opts["profile"] and not opts["coverage"]:
+        die(2, "--profile needs --coverage PATH")
+    if opts["extreme"] and not opts["mutation"]:
+        die(2, "--extreme is only meaningful with --mutation")
+    if opts["security"] not in (None, "observe", "changed", "block"):
+        die(2, "--security must be observe, changed or block")
+    return opts
+
+
+def mode_of(opts):
+    for flag, name in (("criteria", "criteria"), ("security", "security"),
+                       ("mutation", "mutation"), ("all", "all")):
+        if opts[flag]:
+            return name
+    return "changed"
+
+
+# ---------------------------------------------------------------- manifest
+
+def validate_manifest(doc):
+    errors = []
+    if not isinstance(doc, dict):
+        return ["the manifest is not a JSON object"]
+    extras = [k for k in doc if k not in ("version", "checks", "security", "mutation")]
+    if extras:
+        errors.append("unknown top-level field(s): %s" % ", ".join(sorted(extras)))
+    if doc.get("version") != 1:
+        errors.append("version must be 1 (found %r)" % (doc.get("version"),))
+    checks = doc.get("checks")
+    if not isinstance(checks, list) or not checks:
+        errors.append("checks must be a non-empty array")
+        checks = []
+    seen = set()
+    for i, chk in enumerate(checks):
+        where = "checks[%d]" % i
+        if not isinstance(chk, dict):
+            errors.append("%s is not an object" % where)
+            continue
+        cid = chk.get("id")
+        if not isinstance(cid, str) or not ID_RE.match(cid):
+            errors.append("%s.id must match ^[a-z0-9][a-z0-9-]{0,63}$" % where)
+        elif cid in seen:
+            errors.append("%s.id '%s' is not unique" % (where, cid))
+        else:
+            seen.add(cid)
+            where = "check '%s'" % cid
+        allowed = ("id", "kind", "runner", "command", "paths", "oracle", "control", "falsify",
+                   "spec_rule", "coverage", "timeout_s", "schema")
+        extra = [k for k in chk if k not in allowed]
+        if extra:
+            errors.append("%s: unknown field(s) %s" % (where, ", ".join(sorted(extra))))
+        if chk.get("kind") not in KINDS:
+            errors.append("%s: kind must be one of %s" % (where, ", ".join(KINDS)))
+        if chk.get("runner") not in RUNNERS:
+            errors.append("%s: runner must be one of %s" % (where, ", ".join(RUNNERS)))
+        if not isinstance(chk.get("command"), str) or not chk.get("command", "").strip():
+            errors.append("%s: command must be a non-empty string" % where)
+        paths = chk.get("paths")
+        if not isinstance(paths, list) or not paths or not all(
+                isinstance(p, str) and p for p in paths):
+            errors.append("%s: paths must be a non-empty array of globs" % where)
+        if chk.get("oracle") not in ORACLES:
+            errors.append("%s: oracle must be declared as one of %s (an absent oracle is not "
+                          "evidence)" % (where, ", ".join(ORACLES)))
+        if "control" in chk and not (isinstance(chk["control"], str) and chk["control"].strip()):
+            errors.append("%s: control must be a non-empty command when present" % where)
+        if chk.get("kind") == "property":
+            for field in ("falsify", "spec_rule"):
+                if not isinstance(chk.get(field), str) or not chk.get(field, "").strip():
+                    errors.append("%s: kind=property requires %s" % (where, field))
+        if chk.get("kind") == "schema" and not isinstance(chk.get("spec_rule"), str):
+            errors.append("%s: kind=schema requires spec_rule" % where)
+        if "timeout_s" in chk:
+            value = chk["timeout_s"]
+            if not isinstance(value, int) or isinstance(value, bool) or value < 1:
+                errors.append("%s: timeout_s must be an integer >= 1" % where)
+    security = doc.get("security", {})
+    if not isinstance(security, dict):
+        errors.append("security must be an object")
+    else:
+        for field in ("rules", "baseline"):
+            if field in security and not isinstance(security[field], str):
+                errors.append("security.%s must be a path string" % field)
+        if "confirm" in security and not isinstance(security["confirm"], bool):
+            errors.append("security.confirm must be a boolean")
+    mutation = doc.get("mutation", {})
+    if not isinstance(mutation, dict):
+        errors.append("mutation must be an object")
+    else:
+        if "limit" in mutation and (not isinstance(mutation["limit"], int)
+                                   or mutation["limit"] < 1):
+            errors.append("mutation.limit must be an integer >= 1")
+    return errors
+
+
+def load_manifest():
+    if not os.path.exists(MANIFEST_REL):
+        die(2, "no manifest at %s\n  run `bin/speckit-init` to seed one, or write it by hand: "
+               "a run with no declared checks would have nothing to report" % MANIFEST_REL)
+    try:
+        with open(MANIFEST_REL) as fh:
+            doc = json.load(fh)
+    except ValueError as exc:
+        die(2, "%s is not valid JSON: %s" % (MANIFEST_REL, exc))
+    errors = validate_manifest(doc)
+    if errors:
+        die(2, "%s rejected, nothing was run and nothing recorded:\n  - %s"
+            % (MANIFEST_REL, "\n  - ".join(errors)))
+    return doc
+
+
+# ---------------------------------------------------------------- shell and git
+
+def run(command, timeout, cwd=None):
+    """Return (exit_code, output, timed_out). 126/127 mean it could not run."""
+    try:
+        proc = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE,
+                                stderr=subprocess.STDOUT, universal_newlines=True, cwd=cwd)
+    except OSError as exc:
+        return 127, str(exc), False
+    try:
+        out, _ = proc.communicate(timeout=timeout)
+        return proc.returncode, out or "", False
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        out, _ = proc.communicate()
+        return None, out or "", True
+
+
+def git(args, cwd=None):
+    try:
+        proc = subprocess.Popen(["git"] + args, stdout=subprocess.PIPE,
+                                stderr=subprocess.DEVNULL, universal_newlines=True, cwd=cwd)
+        out, _ = proc.communicate()
+    except OSError:
+        return None
+    if proc.returncode != 0:
+        return None
+    return out
+
+
+def is_git_repo():
+    return git(["rev-parse", "--git-dir"]) is not None
+
+
+def merge_base():
+    for ref in ("main", "master", "origin/main", "origin/master"):
+        if git(["rev-parse", "--verify", "--quiet", ref]) is None:
+            continue
+        base = git(["merge-base", "HEAD", ref])
+        if base:
+            return base.strip()
+    return "HEAD"
+
+
+def changed_files(base):
+    if not is_git_repo():
+        return None
+    base = base or merge_base()
+    tracked = git(["diff", "--name-only", "--diff-filter=ACMR", base]) or ""
+    untracked = git(["ls-files", "--others", "--exclude-standard"]) or ""
+    files = [line.strip() for line in (tracked + "\n" + untracked).splitlines()]
+    # The engine's own state is not a code change: a ledger append must not turn every
+    # subsequent run into "a changed file matched by no check".
+    return sorted(set(f for f in files if f and not f.startswith(".specify/")))
+
+
+def fingerprint():
+    head = (git(["rev-parse", "HEAD"]) or "no-head").strip()
+    diff = git(["diff", "HEAD"]) or ""
+    payload = (head + "\n" + diff).encode("utf-8")
+    return "sha256:" + hashlib.sha256(payload).hexdigest()
+
+
+# ---------------------------------------------------------------- selection
+
+def glob_to_regex(pattern):
+    out, i = "", 0
+    while i < len(pattern):
+        ch = pattern[i]
+        if pattern[i:i + 3] == "**/":
+            out += "(?:.*/)?"
+            i += 3
+            continue
+        if pattern[i:i + 2] == "**":
+            out += ".*"
+            i += 2
+            continue
+        if ch == "*":
+            out += "[^/]*"
+        elif ch == "?":
+            out += "[^/]"
+        else:
+            out += re.escape(ch)
+        i += 1
+    return re.compile("^" + out + "$")
+
+
+# A file-glob selector bounds a change's effect by the globs that name it. That holds for a
+# private module; it does not hold for a file every test reads through an import or a fixture
+# root. Selecting only the checks whose globs name `conftest.py` would run one test file out of
+# a suite whose fixtures all just changed — the unsound direction, and silently so. The rule is
+# therefore: when the change lands in a shared or configuration file, the selection cannot be
+# bounded, so every check runs and the report says why. (pytest-testmon goes the other way and
+# documents that it ignores untracked files; this is the RTS soundness condition, not its
+# precedent — a selector is safe only when it omits no test that could reveal the change.)
+DEFAULT_SELECT_ALL_ON = (
+    "**/conftest.py",
+    "**/pytest.ini",
+    "**/pyproject.toml",
+    "**/setup.cfg",
+    "**/tox.ini",
+    "**/requirements*.txt",
+    "**/Makefile",
+    "**/go.mod",
+    "**/Cargo.toml",
+    "**/package.json",
+    "**/jest.config.*",
+    "**/vitest.config.*",
+    "**/*.lock",
+    ".specify/verify.json",
+)
+
+
+def select_all_on(manifest):
+    configured = (manifest.get("selection") or {}).get("select_all_on")
+    return list(configured) if configured else list(DEFAULT_SELECT_ALL_ON)
+
+
+def select(manifest, opts, mode):
+    if mode == "all":
+        return list(manifest["checks"]), [], [], None, None
+    if mode in ("criteria", "mutation", "security"):
+        return [], [], [], None, None
+    files = changed_files(opts.get("base"))
+    if files is None:
+        return [], [], [], "not a git repository: change-scoped selection cannot name a change set", None
+    if not files:
+        return [], [], [], "no changed files: there is nothing to verify", None
+    shared = [p for p in files
+              if any(glob_to_regex(pat).match(p) for pat in select_all_on(manifest))]
+    if shared:
+        return (list(manifest["checks"]), files, [], None,
+                "select-all: %s changed, so a file-glob selection cannot bound the effect"
+                % ", ".join(shared[:3]))
+    selected, unmatched = [], []
+    for path in files:
+        matched = False
+        for chk in manifest["checks"]:
+            if any(glob_to_regex(pat).match(path) for pat in chk["paths"]):
+                matched = True
+                if chk not in selected:
+                    selected.append(chk)
+        if not matched:
+            unmatched.append(path)
+    return selected, files, unmatched, None, None
+
+
+# ---------------------------------------------------------------- adapters
+
+COUNT_RE = re.compile(r"(\d+) (passed|failed|error|errors|skipped|xfailed|xpassed)\b")
+
+
+def counted(out):
+    counts = {}
+    for num, word in COUNT_RE.findall(out):
+        counts[word] = counts.get(word, 0) + int(num)
+    return counts
+
+
+def adapt(runner, code, out):
+    """Return (status, examined_or_None, note). Never invents a count."""
+    if code in (126, 127):
+        return "not-run", 0, "the command could not run (exit %s)" % code
+    counts = counted(out)
+
+    def verdict_from(code, examined, note):
+        if code == 0:
+            return "pass", examined, note
+        return "fail", examined, note or "exit %s" % code
+
+    if runner == "pytest":
+        if code == 5:
+            return "no-items", 0, "pytest exit 5: no tests collected"
+        if "no tests ran" in out:
+            return "no-items", 0, "pytest: no tests ran"
+        examined = counts.get("passed", 0) + counts.get("failed", 0) + \
+            counts.get("error", 0) + counts.get("errors", 0)
+        if code == 0 and not counts:
+            return "pass", None, "pytest: count not parsed from output (examined unknown)"
+        if code == 0 and examined == 0 and counts.get("skipped"):
+            return "no-items", 0, "pytest: every collected test was skipped"
+        return verdict_from(code, examined, None)
+
+    if runner == "jest":
+        if "No tests found" in out:
+            return "no-items", 0, "jest: no tests found"
+        stripped = out.strip()
+        if stripped.startswith("{"):
+            try:
+                doc = json.loads(stripped)
+            except ValueError:
+                doc = None
+            if isinstance(doc, dict) and "numTotalTests" in doc:
+                total = doc.get("numTotalTests", 0)
+                if total == 0:
+                    return "no-items", 0, "jest: numTotalTests=0"
+                return verdict_from(code, total, None)
+        examined = counts.get("passed", 0) + counts.get("failed", 0)
+        if code == 0 and examined == 0:
+            return "pass", None, "jest: count not parsed from output (examined unknown)"
+        return verdict_from(code, examined, None)
+
+    if runner == "cargo":
+        match = re.search(r"test result: (ok|FAILED)\. (\d+) passed; (\d+) failed", out)
+        if match:
+            examined = int(match.group(2)) + int(match.group(3))
+            if examined == 0:
+                return "no-items", 0, "cargo: running 0 tests"
+            status = "pass" if match.group(1) == "ok" and code == 0 else "fail"
+            return status, examined, None if status == "pass" else "cargo reported failures"
+        if "running 0 tests" in out:
+            return "no-items", 0, "cargo: running 0 tests"
+        return verdict_from(code, None, "cargo: no test result line parsed")
+
+    if runner == "go":
+        passes = len(re.findall(r"^--- PASS:", out, re.M))
+        fails = len(re.findall(r"^--- FAIL:", out, re.M))
+        if passes + fails == 0:
+            if "[no test files]" in out:
+                return "no-items", 0, "go: no test files in the selected packages"
+            if code == 0:
+                return "pass", None, "go: no test counts parsed (examined unknown)"
+            return "fail", 0, "go: exit %s with no parsed tests" % code
+        return verdict_from(code, passes + fails, None)
+
+    if runner == "schemathesis":
+        if code == 2:
+            return "not-run", 0, "schemathesis exit 2: nothing tested or invalid configuration"
+        match = re.search(r"(\d+) operations? tested", out)
+        examined = int(match.group(1)) if match else None
+        return verdict_from(code, examined, None)
+
+    if runner == "make":
+        if "Nothing to be done" in out and code == 0:
+            return "no-items", 0, "make: nothing to be done"
+        examined = counts.get("passed", 0) + counts.get("failed", 0)
+        if code == 0 and examined == 0:
+            return "pass", None, "make: succeeded, count not parsed (examined unknown)"
+        return verdict_from(code, examined, None)
+
+    match = re.search(r"examined=(\d+)", out)
+    if match:
+        return verdict_from(code, int(match.group(1)), None)
+    if counts:
+        return verdict_from(code, counts.get("passed", 0) + counts.get("failed", 0), None)
+    if code == 0:
+        return "pass", None, "command: no count in output (examined unknown)"
+    return "fail", 0, "exit %s" % code
+
+
+# ---------------------------------------------------------------- checks
+
+def run_check(chk):
+    """Return a result dict. The control runs first: a control that passes makes this vacuous."""
+    timeout = chk.get("timeout_s", 300)
+    result = {"id": chk["id"], "status": None, "examined": None, "note": None,
+              "runner": chk["runner"], "kind": chk["kind"],
+              "spec_rule": chk.get("spec_rule")}
+
+    if chk.get("oracle") not in ("spec", "fixture", "declared"):
+        result["status"] = "skipped"
+        result["note"] = "oracle=%s: expected value comes from inside the code under test" % \
+            chk.get("oracle")
+        return result
+
+    control = chk.get("control")
+    if chk.get("kind") in ("test", "property"):
+        if not control:
+            result["status"] = "vacuous"
+            result["note"] = "no negative control declared; add `control` (a command that must fail)"
+            return result
+
+    for field, label in (("control", "negative control"), ("falsify", "falsification")):
+        command = chk.get(field)
+        if not command:
+            continue
+        code, out, timed_out = run(command, timeout)
+        if timed_out:
+            result["status"] = "not-run"
+            result["note"] = "%s timed out: %s" % (label, command)
+            return result
+        if code in (126, 127):
+            result["status"] = "not-run"
+            result["note"] = "%s could not run (exit %s): %s" % (label, code, command)
+            return result
+        if code == 0:
+            result["status"] = "vacuous"
+            result["note"] = "%s did not fail, so this check cannot prove anything: %s" % (
+                label, command)
+            return result
+
+    code, out, timed_out = run(chk["command"], timeout)
+    if timed_out:
+        result["status"] = "fail"
+        result["note"] = "timeout after %ss" % timeout
+        return result
+    status, examined, note = adapt(chk["runner"], code, out)
+    if status == "fail":
+        # One re-run, both outcomes retained. A test that cannot hold still is not a pass.
+        code2, out2, timed2 = run(chk["command"], timeout)
+        if not timed2 and code2 == 0 and counted(out2):
+            result["status"] = "flaky"
+            result["examined"] = counted(out2).get("passed", 0)
+            result["note"] = "flaky-classified: attempt 1 exit %s, attempt 2 exit 0" % code
+            return result
+    result["status"] = status
+    result["examined"] = examined
+    result["note"] = note
+    if status == "fail":
+        # A failing property's counterexample is the output. It is kept and printed verbatim:
+        # summarising or truncating it would re-word the one thing the reader needs.
+        result["output"] = out
+    return result
+
+
+# ---------------------------------------------------------------- verdict
+
+def compute_verdict(results, unmatched, selection_error, examined_total, refused,
+                    unknown_count):
+    failures = [r for r in results if r["status"] == "fail"]
+    skips = [r for r in results if r["status"] in ("skipped", "not-run")]
+    vacuous = [r for r in results if r["status"] == "vacuous"]
+    flaky = [r for r in results if r["status"] == "flaky"]
+    noitems = [r for r in results if r["status"] == "no-items"]
+    if failures:
+        return "FAIL", ["%d check(s) failed" % len(failures)]
+    reasons = []
+    if refused:
+        reasons.append(refused)
+    if selection_error:
+        reasons.append(selection_error)
+    if unmatched:
+        reasons.append("%d changed file(s) matched by no check" % len(unmatched))
+    if examined_total == 0 and not results:
+        reasons.append("no checks were selected")
+    elif examined_total == 0:
+        reasons.append("nothing was examined")
+    if noitems:
+        reasons.append("%d check(s) collected nothing" % len(noitems))
+    if skips:
+        reasons.append("%d check(s) did not run" % len(skips))
+    if vacuous:
+        reasons.append("%d vacuous check(s)" % len(vacuous))
+    if flaky:
+        reasons.append("%d flaky-classified check(s)" % len(flaky))
+    if unknown_count:
+        reasons.append("%d check(s) with an unknown examined count" % unknown_count)
+    if reasons:
+        return "INCOMPLETE", reasons
+    return "PASS", []
+
+
+# ---------------------------------------------------------------- criteria
+
+def locate_spec(opts):
+    if opts.get("spec"):
+        if not os.path.exists(opts["spec"]):
+            die(2, "--spec %s does not exist" % opts["spec"])
+        return opts["spec"]
+    feature_file = os.path.join(".specify", "feature.json")
+    if os.path.exists(feature_file):
+        try:
+            with open(feature_file) as fh:
+                doc = json.load(fh)
+            directory = doc.get("feature_directory")
+        except ValueError:
+            directory = None
+        if directory:
+            candidate = os.path.join(directory, "spec.md")
+            if os.path.exists(candidate):
+                return candidate
+    found = []
+    if os.path.isdir("specs"):
+        for name in sorted(os.listdir("specs")):
+            candidate = os.path.join("specs", name, "spec.md")
+            if os.path.exists(candidate):
+                found.append(candidate)
+    if len(found) == 1:
+        return found[0]
+    return None
+
+
+def criteria_tally(opts):
+    """n/m over the spec's SC-xxx criteria, evidenced by a progress.md line that cites them."""
+    spec = locate_spec(opts)
+    if spec is None:
+        return {"evidenced": 0, "total": 0, "gaps": [], "source": None,
+                "refused": "no feature spec located; pass --spec PATH"}
+    with open(spec) as fh:
+        text = fh.read()
+    ids = ["SC-%s" % n for n in sorted(set(re.findall(r"\*\*SC-(\d{3})\*\*", text)))]
+    if not ids:
+        return {"evidenced": 0, "total": 0, "gaps": [], "source": spec,
+                "refused": "%s declares no acceptance criteria (SC-xxx); completion cannot be "
+                           "reported" % spec}
+    progress = os.path.join(os.path.dirname(spec), "progress.md")
+    cited = set()
+    if os.path.exists(progress):
+        with open(progress) as fh:
+            # A citation is an explicit [SC-003], not any mention of an id: prose that says a
+            # criterion was NOT measured must not count as evidence for it.
+            cited = set(re.findall(r"\[(SC-\d{3})\]", fh.read()))
+    unknown = sorted(cited - set(ids))
+    if unknown:
+        die(2, "%s cites criterion id(s) that %s does not declare: %s"
+            % (progress, spec, ", ".join(unknown)))
+    evidenced = [i for i in ids if i in cited]
+    gaps = [i for i in ids if i not in cited]
+    return {"evidenced": len(evidenced), "total": len(ids), "gaps": gaps, "source": spec,
+            "refused": None}
+
+
+# ---------------------------------------------------------------- mutation
+
+def code_digest(code):
+    parts = [code.co_code, code.co_names, code.co_varnames, code.co_argcount,
+             code.co_kwonlyargcount, code.co_flags]
+    consts = []
+    for const in code.co_consts:
+        if hasattr(const, "co_code"):
+            consts.append(code_digest(const))
+        else:
+            consts.append(repr(const))
+    parts.append(tuple(consts))
+    return hashlib.sha256(repr(parts).encode("utf-8")).hexdigest()
+
+
+def compile_digest(source):
+    try:
+        code = compile(source, "<mutant>", "exec")
+    except (SyntaxError, ValueError):
+        return None
+    return code_digest(code)
+
+
+def mutation_sites(source):
+    """Operator sites as (line, operator, original, replacement, (row, col, endcol))."""
+    sites = []
+    try:
+        tokens = list(tokenize.generate_tokens(io.StringIO(source).readline))
+    except (tokenize.TokenError, IndentationError):
+        return sites
+    for tok in tokens:
+        if tok.type not in (tokenize.OP, tokenize.NAME):
+            continue
+        if tok.string not in OPERATOR_MAP:
+            continue
+        name, replacement = OPERATOR_MAP[tok.string]
+        sites.append({"line": tok.start[0], "operator": name, "original": tok.string,
+                      "replacement": replacement,
+                      "span": (tok.start[0], tok.start[1], tok.end[1])})
+    return sites
+
+
+def apply_sites(source, sites):
+    lines = source.splitlines(True)
+    for site in sorted(sites, key=lambda s: (s["span"][0], s["span"][1]), reverse=True):
+        row, start, end = site["span"]
+        line = lines[row - 1]
+        lines[row - 1] = line[:start] + site["replacement"] + line[end:]
+    return "".join(lines)
+
+
+def function_ranges(source):
+    """Top-level block line ranges, computed without end_lineno (which is Python 3.8+)."""
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return []
+    starts = [node.lineno for node in tree.body
+              if hasattr(node, "lineno")
+              and isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))]
+    total = len(source.splitlines())
+    ranges = []
+    for index, start in enumerate(starts):
+        end = starts[index + 1] - 1 if index + 1 < len(starts) else total
+        ranges.append((start, end))
+    return ranges
+
+
+def mutation_stage(changed, opts, manifest):
+    cfg = manifest.get("mutation", {}) or {}
+    limit = cfg.get("limit", 20)
+    files = []
+    if changed is None:
+        changed = changed_files(opts.get("base"))
+    for path in (changed or []):
+        if path.endswith(".py") and os.path.isfile(path) and not path.startswith(".specify/"):
+            files.append(path)
+    stage = {"ran": False, "note": None, "mode": "extreme" if opts["extreme"] else "operator",
+             "candidates": [], "counts": {}, "budget": None, "unmeasured": []}
+    if not files:
+        stage["note"] = "no changed Python files; nothing to mutate"
+        return stage
+
+    test_checks = [c for c in manifest["checks"] if c.get("kind") == "test"]
+    if not test_checks:
+        stage["note"] = "no test check in the manifest; a mutant cannot be classified"
+        return stage
+    command = test_checks[0]["command"]
+    timeout = test_checks[0].get("timeout_s", 300)
+
+    baseline_code, baseline_out, baseline_timeout = run(command, timeout)
+    if baseline_timeout:
+        stage["note"] = "baseline test run timed out; mutation needs a working oracle"
+        return stage
+    if baseline_code == 5 or "No tests found" in baseline_out or "no tests ran" in baseline_out:
+        stage["unmeasured"] = list(files)
+        stage["note"] = "the test command collected nothing; every changed module is unmeasured"
+        return stage
+    stage["ran"] = True
+    budget = {"killed_assertion": 0, "killed_crash": 0, "survived": 0, "equivalent": 0,
+              "unknown": 0, "generated": 0}
+    ignore = shutil.ignore_patterns(".git", "node_modules", "__pycache__", ".specify",
+                                    ".venv", "venv")
+    for path in files:
+        with open(path) as fh:
+            source = fh.read()
+        sites = mutation_sites(source)
+        if opts["extreme"]:
+            batches = []
+            for start, end in function_ranges(source):
+                inside = [s for s in sites if start <= s["line"] <= end]
+                if inside:
+                    batches.append([dict(s, operator="extreme", original="<method>",
+                                         replacement="all operators in the method")
+                                    for s in inside])
+        else:
+            batches = [[site] for site in sites]
+        if not batches:
+            stage["unmeasured"].append(path)
+            continue
+        for batch in batches:
+            if budget["generated"] >= limit:
+                break
+            budget["generated"] += 1
+            mutated = apply_sites(source, batch)
+            digest_before = compile_digest(source)
+            digest_after = compile_digest(mutated)
+            entry = {"file": path, "line": batch[0]["line"],
+                     "operator": batch[0]["operator"], "status": None,
+                     "original": batch[0]["original"], "replacement": batch[0]["replacement"]}
+            if digest_after is None:
+                entry["status"] = "unknown"
+                budget["unknown"] += 1
+                continue
+            if digest_after == digest_before:
+                entry["status"] = "equivalent"
+                budget["equivalent"] += 1
+                continue
+            work = tempfile.mkdtemp(prefix="speckit-mutation-")
+            project = os.path.join(work, "project")
+            try:
+                shutil.copytree(".", project, ignore=ignore)
+                target = os.path.join(project, path)
+                with open(target, "w") as fh:
+                    fh.write(mutated)
+                code, out, timed_out = run(command, timeout, cwd=project)
+            finally:
+                shutil.rmtree(work, ignore_errors=True)
+            if timed_out:
+                entry["status"] = "killed-by-crash"
+                entry["note"] = "timeout (a hang is not an assertion)"
+                budget["killed_crash"] += 1
+            elif code == 0:
+                entry["status"] = "survived-candidate"
+                budget["survived"] += 1
+                if len(stage["candidates"]) < limit:
+                    stage["candidates"].append(entry)
+            elif re.search(r"AssertionError|----? FAIL|^FAILED|^E\s+assert", out, re.M):
+                entry["status"] = "killed-by-assertion"
+                budget["killed_assertion"] += 1
+            else:
+                entry["status"] = "killed-by-crash"
+                budget["killed_crash"] += 1
+    stage["budget"] = budget
+    if not stage["candidates"] and budget["generated"] == 0:
+        stage["note"] = "no mutation operator site in the changed files"
+    return stage
+
+
+# ---------------------------------------------------------------- security
+
+def security_stage(opts):
+    stage = opts["security"]
+    tool = os.path.join(os.environ.get("SPECKIT_BIN", "bin"), "speckit-security")
+    if not os.path.exists(tool):
+        return {"status": "not-run", "note": "bin/speckit-security is missing", "findings": []}
+    args = [tool, stage, "--json"]
+    if opts["offline"]:
+        args.append("--offline")
+    if opts["confirm"]:
+        args.append("--confirm")
+    proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                            universal_newlines=True)
+    out, err = proc.communicate()
+    doc = None
+    try:
+        doc = json.loads(out) if out.strip() else None
+    except ValueError:
+        doc = None
+    if doc is None:
+        return {"status": "scan-failed", "note": (err or out or "no output").strip()[:400],
+                "findings": [], "exit": proc.returncode}
+    doc["exit"] = proc.returncode
+    return doc
+
+
+# ---------------------------------------------------------------- coverage
+
+def changed_line_report(path, profile):
+    with open(path) as fh:
+        try:
+            report = json.load(fh)
+        except ValueError as exc:
+            die(2, "--coverage %s is not JSON: %s" % (path, exc))
+    executed = {}
+    for entry in report.get("files", []) or []:
+        executed[entry.get("file")] = set(entry.get("executed_lines", []) or [])
+    changed = changed_files(None) or []
+    reached, unexercised, unknown = [], [], []
+    for name in changed:
+        if name not in executed:
+            unknown.append(name)
+            continue
+        lines = added_line_numbers(name)
+        for lineno in lines:
+            (reached if lineno in executed[name] else unexercised).append((name, lineno))
+    return {"profile": profile, "reached": len(reached), "total": len(reached) + len(unexercised),
+            "unexercised": ["%s:%d" % pair for pair in unexercised],
+            "unprofiled": unknown}
+
+
+def added_line_numbers(path):
+    base = merge_base()
+    diff = git(["diff", "-U0", base, "--", path]) or ""
+    numbers = []
+    for match in re.finditer(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@", diff, re.M):
+        start = int(match.group(1))
+        count = int(match.group(2) or 1)
+        numbers.extend(range(start, start + count))
+    return numbers
+
+
+# ---------------------------------------------------------------- report
+
+def render_report(mode, opts, results, examined_total, verdict, reasons, unmatched, selection,
+                  criteria, changed_lines, mutation, security, record_id):
+    out = []
+    out.append("== selection ==")
+    if mode in ("all", "criteria", "mutation", "security"):
+        out.append("mode: %s (every check in the manifest)" % mode)
+    else:
+        base = (opts.get("base") or merge_base())
+        out.append("mode: changed (base: %s)" % base[:12])
+    if mode == "changed":
+        if selection:
+            out.append("changed: %d file(s) -> checks: %s"
+                       % (len(selection["files"]),
+                          ", ".join(c["id"] for c in selection["checks"]) or "(none)"))
+        out.append("unmatched: %s" % (", ".join(unmatched) if unmatched else "(none)"))
+        if selection.get("fallback"):
+            out.append("fallback: %s" % selection["fallback"])
+    else:
+        out.append("selected: %d declared check(s): %s"
+                   % (len(selection["checks"]),
+                      ", ".join(c["id"] for c in selection["checks"]) or "(none)"))
+    out.append("")
+    out.append("== checks ==")
+    if not results:
+        out.append("  (no check ran)")
+    for res in results:
+        examined = "—" if res["examined"] is None else str(res["examined"])
+        out.append("  %-8s %-20s examined %-5s %s%s"
+                   % (res["status"], res["id"], examined, res["runner"],
+                      "" if not res["note"] else "  (%s)" % res["note"]))
+        if res.get("spec_rule"):
+            out.append("           encodes: %s" % res["spec_rule"])
+    if any(res["status"] == "fail" for res in results):
+        out.append("")
+        out.append("== failing output (verbatim) ==")
+        for res in results:
+            if res["status"] == "fail" and res.get("output"):
+                out.append("--- %s ---" % res["id"])
+                out.append(res["output"].rstrip())
+    out.append("")
+    out.append("== criteria ==")
+    if criteria["total"] == 0:
+        out.append("refused: %s" % criteria["refused"])
+    else:
+        gaps = ", ".join(criteria["gaps"]) if criteria["gaps"] else "none"
+        out.append("%s  %d/%d evidenced; gaps: %s"
+                   % (criteria["source"], criteria["evidenced"], criteria["total"], gaps))
+    if changed_lines:
+        out.append("")
+        out.append("== changed lines ==")
+        out.append("profile=%s  reached %d of %d changed lines"
+                   % (changed_lines["profile"], changed_lines["reached"], changed_lines["total"]))
+        if changed_lines["unexercised"]:
+            out.append("unexercised: %s" % ", ".join(changed_lines["unexercised"][:12]))
+        if changed_lines["profile"] == "selected":
+            out.append("this profile came from a selected run: it does not support the claim "
+                       "that no test executes a line")
+    if mutation:
+        out.append("")
+        out.append("== mutation ==")
+        out.append("mode: %s%s" % (mutation["mode"],
+                                   " (whole-method; less precise)" if mutation["mode"] == "extreme"
+                                   else ""))
+        if mutation["note"]:
+            out.append(mutation["note"])
+        for cand in mutation["candidates"]:
+            out.append("  %s:%s  %s  %s  (%s -> %s)"
+                       % (cand["file"], cand["line"], cand["operator"], cand["status"],
+                          cand["original"], cand["replacement"]))
+        if mutation["unmeasured"]:
+            out.append("unmeasured (no tests reach this module): %s"
+                       % ", ".join(mutation["unmeasured"]))
+        if mutation["budget"]:
+            budget = mutation["budget"]
+            killed = budget["killed_assertion"] + budget["killed_crash"]
+            total = max(budget["generated"], 1)
+            out.append("budget: %d of %d mutants killed (%d%%) — a budget, not a threshold; "
+                       "%d candidate(s) to review"
+                       % (killed, budget["generated"], int(100.0 * killed / total),
+                          len(mutation["candidates"])))
+    if security:
+        out.append("")
+        out.append("== security ==")
+        out.append("stage: %s  status: %s  rules: %s"
+                   % (security.get("stage", "?"), security.get("status", "?"),
+                      security.get("rules_sha256", "unhashed") or "unhashed"))
+        for finding in security.get("findings", [])[:10]:
+            out.append("  %-13s %s:%s  %s"
+                       % (finding.get("tier", "pattern-only"), finding.get("file", "?"),
+                          finding.get("line", "?"), finding.get("rule", "?")))
+        if security.get("note"):
+            out.append("note: %s" % security["note"])
+        out.append("control: environment-only credentials (a value read from the environment) "
+                   "cannot be found by a scanner; a clean scan does not satisfy that rule")
+    out.append("")
+    if verdict == "PASS":
+        out.append("SELF-VERIFY: PASS — %d check(s), 0 skipped, 0 failed  (examined all declared "
+                   "checks)" % len(results))
+    else:
+        summary = ", ".join(reasons) if reasons else "no reason recorded"
+        out.append("SELF-VERIFY: %s — %s" % (verdict, summary))
+    if record_id:
+        out.append("           record: %s#%s  examined=%d" % (LEDGER_REL, record_id, examined_total))
+    else:
+        out.append("           record: none — %s  examined=%d"
+                   % ("report only (--no-ledger)" if opts["no_ledger"] else "not durable",
+                      examined_total))
+    return "\n".join(out)
+
+
+# ---------------------------------------------------------------- main
+
+def append_record(record):
+    tool = os.path.join(os.environ.get("SPECKIT_BIN", "bin"), "speckit-ledger")
+    if not os.path.exists(tool):
+        return None, "bin/speckit-ledger is missing"
+    proc = subprocess.Popen([tool, "append", "--stdin"], stdin=subprocess.PIPE,
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                            universal_newlines=True)
+    out, err = proc.communicate(json.dumps(record))
+    if proc.returncode != 0:
+        return None, (err or out or "append failed").strip()
+    return out.strip(), None
+
+
+def main(argv):
+    opts = parse_args(argv)
+    if opts["help"]:
+        sys.stdout.write(USAGE)
+        return 0
+    manifest = load_manifest()
+    mode = mode_of(opts)
+    started = time.time()
+
+    selection, files, unmatched, selection_error, fallback = select(manifest, opts, mode)
+    if mode in ("mutation", "security"):
+        # These stages are scoped to the change set too, even though they select no checks.
+        discovered = changed_files(opts.get("base"))
+        if discovered is not None:
+            files = discovered
+    selection_info = {"files": files or [], "checks": selection, "fallback": fallback}
+
+    if mode == "criteria":
+        criteria = criteria_tally(opts)
+        if criteria["refused"]:
+            sys.stderr.write("criteria: %s\n" % criteria["refused"])
+            return 3
+        gaps = ", ".join(criteria["gaps"]) if criteria["gaps"] else "none"
+        sys.stdout.write("%s  %d/%d evidenced; gaps: %s\n"
+                         % (criteria["source"], criteria["evidenced"], criteria["total"], gaps))
+        return 0
+
+    results = []
+    if not selection_error:
+        for chk in selection:
+            results.append(run_check(chk))
+
+    examined_total = sum(r["examined"] for r in results
+                         if isinstance(r.get("examined"), int) and r["examined"] > 0)
+    unknown_count = sum(1 for r in results
+                        if r["status"] in ("pass", "flaky") and r["examined"] is None)
+
+    criteria = criteria_tally(opts)
+
+    changed_lines = None
+    if opts["coverage"]:
+        changed_lines = changed_line_report(opts["coverage"], opts["profile"])
+
+    mutation = None
+    if mode == "mutation" or opts["mutation"]:
+        mutation = mutation_stage(files, opts, manifest)
+        if mutation.get("budget"):
+            examined_total += mutation["budget"]["generated"]
+        if not mutation.get("ran") and mutation.get("note"):
+            selection_error = selection_error or mutation["note"]
+
+    security = None
+    if mode == "security" or opts["security"]:
+        security = security_stage(opts)
+        examined_total += int(security.get("files_scanned", 0) or 0)
+        if security.get("status") == "scan-failed":
+            selection_error = selection_error or "security scan failed"
+        elif security.get("status") == "not-run":
+            selection_error = selection_error or "security stage did not run"
+
+    # The tally is a completion-report obligation; a mutation or security run is not a
+    # completion report, so its refusal does not decide that run's verdict.
+    refused = criteria.get("refused") if mode not in ("mutation", "security") else None
+    verdict, reasons = compute_verdict(results, unmatched, selection_error, examined_total,
+                                       refused, unknown_count)
+    if opts["no_ledger"]:
+        verdict = "INCOMPLETE" if verdict != "FAIL" else "FAIL"
+        if verdict == "INCOMPLETE" and not reasons:
+            reasons = ["report only (--no-ledger): no record was appended"]
+    if verdict == "INCOMPLETE" and results and all(r["status"] == "not-run" for r in results):
+        reasons = (reasons or []) + ["no check could run"]
+    exit_code = 0 if verdict == "PASS" else (1 if verdict == "FAIL" else 3)
+
+    record = {
+        "id": "%s" % uuid.uuid4(),
+        "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "mode": mode,
+        "command": "scripts/verify " + " ".join(argv).strip(),
+        "exit": exit_code,
+        "fingerprint": fingerprint(),
+        "examined": examined_total,
+        "verdict": verdict,
+        "checks": [{"id": r["id"], "status": r["status"],
+                    **({"examined": r["examined"]} if isinstance(r["examined"], int) else {}),
+                    **({"note": r["note"]} if r["note"] else {})}
+                   for r in results],
+        "criteria": dict((k, criteria[k]) for k in ("evidenced", "total", "gaps")),
+    }
+    if opts["profile"]:
+        record["profile"] = {"source": opts["profile"], "path": opts["coverage"]}
+    if mode == "changed" and files:
+        record["selection"] = list(files)
+
+    record_id, ledger_error = (None, None) if opts["no_ledger"] else append_record(record)
+    if ledger_error:
+        verdict = "INCOMPLETE" if verdict != "FAIL" else "FAIL"
+        exit_code = 1 if verdict == "FAIL" else 3
+        reasons = (reasons or []) + ["record not durable: %s" % ledger_error]
+
+    if opts["json"]:
+        sys.stdout.write(json.dumps({
+            "record": record,
+            "recorded": bool(record_id),
+            "report": {
+                "selection": [c["id"] for c in selection],
+                "changed": files or [],
+                "unmatched": unmatched,
+                "fallback": fallback,
+                "changed_lines": changed_lines,
+                "mutation": mutation,
+                "security": security,
+                "reasons": reasons,
+                "duration_ms": int((time.time() - started) * 1000),
+            },
+        }, indent=2, sort_keys=True) + "\n")
+    else:
+        sys.stdout.write(render_report(mode, opts, results, examined_total, verdict, reasons,
+                                       unmatched, selection_info, criteria, changed_lines,
+                                       mutation, security, record_id) + "\n")
+    return exit_code
+
+
+sys.exit(main(sys.argv[1:]))
+PY
+)
+exec python3 -c "$PROG" "$@"

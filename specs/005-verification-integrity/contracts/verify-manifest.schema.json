@@ -1,0 +1,141 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/watanabefam/speckit-kit/specs/005-verification-integrity/contracts/verify-manifest.schema.json",
+  "title": "speckit verification manifest",
+  "description": "The check manifest at .specify/verify.json. One invalid check rejects the whole manifest: a partially-valid manifest produces green runs over half a suite.",
+  "type": "object",
+  "required": ["version", "checks"],
+  "additionalProperties": false,
+  "properties": {
+    "version": { "const": 1 },
+    "checks": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/check" }
+    },
+    "security": { "$ref": "#/$defs/security" },
+    "mutation": { "$ref": "#/$defs/mutation" },
+    "selection": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Change-scoped selection. Omitted, the built-in shared-file list applies.",
+      "properties": {
+        "select_all_on": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 },
+          "description": "Globs for shared or configuration files. A change to any of them runs every check, because a file-glob selection cannot bound such a change's effect."
+        }
+      }
+    }
+  },
+  "$defs": {
+    "check": {
+      "type": "object",
+      "required": ["id", "kind", "runner", "command", "paths", "oracle"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]{0,63}$",
+          "description": "Unique within the manifest; appears verbatim in reports and ledger records."
+        },
+        "kind": {
+          "enum": ["test", "lint", "typecheck", "build", "property", "schema", "mutation", "security"]
+        },
+        "runner": {
+          "enum": ["pytest", "jest", "cargo", "go", "make", "schemathesis", "command"],
+          "description": "Selects the exit-code and examined-count adapter. `command` reports examined=unknown unless the command prints a parseable count."
+        },
+        "command": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Executed verbatim and recorded in the ledger. Must not contain a credential; pass secrets through env."
+        },
+        "paths": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 },
+          "description": "Globs matched against the change set for selection. Used with git diff --name-only."
+        },
+        "oracle": {
+          "enum": ["spec", "fixture", "declared", "implementation"],
+          "description": "Where the expected value comes from. `implementation` (or an absent value) excludes the check from evidence with a named reason (FR-004)."
+        },
+        "control": {
+          "type": "string",
+          "minLength": 1,
+          "description": "A command that must FAIL. If it passes, the check is vacuous and the verdict is INCOMPLETE (FR-005)."
+        },
+        "falsify": {
+          "type": "string",
+          "minLength": 1,
+          "description": "For kind=property: the known-failing input that demonstrates the property can fail (FR-030). Executed before the property."
+        },
+        "spec_rule": {
+          "type": "string",
+          "minLength": 1,
+          "description": "For kind=property or schema: the specification rule the check encodes (FR-029)."
+        },
+        "coverage": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Path to a coverage.py JSON report this check contributes to the changed-line report (FR-033)."
+        },
+        "timeout_s": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 300,
+          "description": "A timeout is status=fail with note=timeout, never a pass."
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "kind": { "enum": ["test", "property"] } }, "required": ["kind"] },
+          "then": { "required": ["control"] }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "property" } }, "required": ["kind"] },
+          "then": { "required": ["falsify", "spec_rule"] }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "schema" } }, "required": ["kind"] },
+          "then": { "required": ["spec_rule"] }
+        }
+      ]
+    },
+    "security": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "rules": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Pinned, committed rule file. Absence is a refusal (exit 2), never a fetch (FR-026)."
+        },
+        "baseline": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Per-rule counts recorded by the observe stage. The block stage refuses without it (FR-025)."
+        },
+        "confirm": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enables the network confirmation tier (trufflehog --only-verified). Offline reports NOT-RUN, never clean (FR-036)."
+        }
+      }
+    },
+    "mutation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "limit": { "type": "integer", "minimum": 1, "default": 20 },
+        "extreme": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whole-method mutation: faster, less precise, always labelled as such (FR-039)."
+        }
+      }
+    }
+  }
+}

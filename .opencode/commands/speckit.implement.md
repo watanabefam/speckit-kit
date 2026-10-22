@@ -52,6 +52,25 @@ Stop only on one of:
 A passing task resets the consecutive-failure counter to 0. Commit per completed task and write its
 ledger line as it finishes, so a resumed run repeats nothing.
 
+### The acceptance check is not yours to edit
+
+Green is not evidence when you can reach it by weakening whatever decides green. Audited agent
+patches show this is not hypothetical: a substantial share of patches that passed their tests were
+not correct fixes, and agents were observed altering expected values, suppressing exceptions,
+skipping assertions and special-casing tests. Under deliberately contradictory tests, agents chose
+the test over the specification on a majority of one benchmark's tasks — and allowing more
+submission attempts raised the pass rate *and* the cheat rate together.
+
+- **Never** change, delete, skip or loosen a test, fixture, snapshot or the verification command to
+  make a task pass. If the test itself is wrong, stop, name it, and get that approved — a test
+  change is a specification change, not an implementation detail.
+- **A requirement you cannot satisfy is a finding, not a failure to hide.** Say which requirement
+  it is, what blocks it, and stop. An available "this cannot be satisfied" route is the measured
+  difference between a loop that reports and one that games: offering that option cut a 54% cheat
+  rate to 9%.
+- Evidence means the command, its output, and confirmation that the acceptance check was the one
+  you were given — not a suite you adjusted until it agreed.
+
 ### Evidence before "done"
 
 You may **not** mark a task or feature complete because the code compiles, a single test

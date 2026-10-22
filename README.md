@@ -333,3 +333,45 @@ have been created, a run that must end — and never the model's own words, beca
 weakest exactly where these scenarios live. `--fake` is the same harness against a scripted agent,
 which is what `self-gate.sh` §1j runs on every push, with a negative control per scenario.
 
+
+## Verification that reports what it examined
+
+`./scripts/verify` is still the one command, but it now dispatches to `bin/speckit-verify` when the
+project has a manifest at `.specify/verify.json` (seeded by `speckit-init`; skip with
+`--no-manifest`). Without a manifest the generated command sequence runs as before, so an existing
+project keeps working.
+
+A check is evidence only when three things are true, and the engine refuses to count it otherwise:
+
+1. it declares where its expected value comes from (`oracle`: `spec` / `fixture` / `declared`), and
+   that is not inside the code under test;
+2. its declared `control` — a command that must **fail** — actually fails;
+3. it examined more than nothing. `pytest` exiting 5, jest's "No tests found", `cargo`'s
+   "running 0 tests" and `go`'s "no test files" all mean *nothing ran*, and none of them is a pass.
+
+| Command | What it is for |
+| --- | --- |
+| `bin/speckit-verify` | the engine: selection, adapters, controls, verdict, report, record |
+| `bin/speckit-ledger` | `append` / `read` / `verify` over the append-only `.specify/ledger.jsonl` |
+| `bin/speckit-security` | `observe` (records a baseline), `changed` (reports), `block` (confirmed-live only) |
+| `evals/run-passk.py` | pass@1, empirical pass^k and the constant-p bound, side by side |
+
+**Changed vs full.** With no flags the engine selects the checks a change can plausibly affect and
+prints the selection. `--all` is the full-suite mode for a scheduled job. A changed file matched by
+no check makes the run `INCOMPLETE` — the report never widens a scoped run into "all tests pass".
+A change to a shared or configuration file (`conftest.py`, `pyproject.toml`, a lockfile, the manifest)
+selects every check and says `fallback:`, because a glob cannot bound the effect of a file every test
+reads.
+
+**Exit codes.** `0` PASS · `1` FAIL · `2` usage or configuration error · `3` INCOMPLETE (zero
+examined, a skip, a vacuous check, an unmatched file, or a record that could not be written).
+
+**Mutation is opt-in.** `--mutation` runs a bounded operator-level pass over changed Python files and
+lists *candidates* to review — a survivor is a question, not a verdict. `--extreme` mutates whole
+methods at once; its output is labelled less precise and never replaces an operator-level run.
+
+**Security is staged.** `observe` records per-rule counts and blocks nothing; `changed` reports
+without blocking; `block` refuses without a baseline and without `--confirm`, and fails only on a
+credential a provider confirmed live on a rule class that has a baseline. The confirmation tier
+sends the candidate credential to the provider — that is what verification means, and it is why the
+tier is explicit. A clean scan never satisfies the environment-only credential rule.
