@@ -90,6 +90,10 @@ check_one() {
     line "${R}MISS${X}  project hooks (added in 1.8.0) — no enforcement layer in this repo"; drift=1
   elif cmp -s "$KIT_ROOT/hooks/speckit-hooks.yaml" "$hooks"; then
     line "${G}ok${X}    project hooks current"
+  elif head -1 "$hooks" 2>/dev/null | grep -q '^# spec-driven-development'; then
+    # It carries the kit's header, so it is a KIT file at an older version — not a merge.
+    # Byte-difference here means the project is running weaker guards than the kit ships.
+    line "${Y}DIFF${X}  project hooks are an older kit version — re-install to get the current guards"; drift=1
   else
     # A project may legitimately MERGE the kit's hooks with its own (e.g. a repo that
     # already had a hooks.yaml). Byte-equality then fails even though nothing is wrong.
@@ -119,16 +123,95 @@ check_one() {
       || { line "${Y}DIFF${X}  AGENTS.md does not mention the hooks (added in 1.8.0)"; drift=1; }
   fi
 
+  # 4b. installed enforcement surface -------------------------------------------
+  # The hooks are inert without the permission boundary and the contract, and the gate's
+  # checks are inert without scripts/verify. A repo missing any of them used to report
+  # "current", which is the one answer a drift checker must never give wrongly.
+  local contract="$root/.opencode/autonomy-contract.md"
+  if [ -f "$contract" ] && cmp -s "$KIT_ROOT/global/autonomy-contract.md" "$contract"; then
+    line "${G}ok${X}    autonomy contract current"
+  elif [ -f "$contract" ]; then
+    line "${Y}DIFF${X}  autonomy contract differs from the kit's"; drift=1
+  else
+    line "${R}MISS${X}  autonomy contract (.opencode/autonomy-contract.md) — the four-bucket handoff is undefined"; drift=1
+  fi
+
+  local oc="" _f
+  for _f in "$root/opencode.json" "$root/opencode.jsonc"; do
+    if [ -f "$_f" ]; then oc="$_f"; break; fi
+  done
+  if [ -z "$oc" ]; then
+    line "${R}MISS${X}  permission boundary (no opencode.json) — irreversible shell actions are unguarded"; drift=1
+  elif ! grep -q '"permission"' "$oc"; then
+    line "${R}MISS${X}  permission key in $(basename "$oc") — irreversible shell actions are unguarded"; drift=1
+  elif ! grep -q '"deny"' "$oc"; then
+    line "${Y}DIFF${X}  permission block has no deny rules"; drift=1
+  elif ! grep -q 'git push\*--force\*' "$oc"; then
+    line "${Y}DIFF${X}  permission block lacks the force-push deny"; drift=1
+  else
+    line "${G}ok${X}    permission boundary present (force-push / publish / destructive DB denied)"
+  fi
+
+  local verify="$root/scripts/verify"
+  if [ -f "$verify" ]; then
+    line "${G}ok${X}    scripts/verify present"
+  elif grep -qE '^\| (test|lint|typecheck|build) \| `' "$root/AGENTS.md" 2>/dev/null; then
+    line "${R}MISS${X}  scripts/verify — the Commands block records checks but there is no runner for them"; drift=1
+  else
+    line "${D}skip${X}  no checks recorded in AGENTS.md, so no scripts/verify expected"
+  fi
+
+  # 4c. Spec Kit's own view of the integration ----------------------------------
+  # `specify integration status` is the native oracle. Its "warning" is EXPECTED when the
+  # preset prepends to six commands, so the checker must distinguish that (exactly those
+  # six, and the prepend check above proves they still carry it) from a managed file that
+  # was rewritten or deleted — which the version string cannot see.
+  if command -v specify >/dev/null 2>&1; then
+    _int="$(cd "$root" && specify integration status --json 2>/dev/null || true)"
+    if [ -n "$_int" ]; then
+      _int_rc=0
+      python3 -c '
+import json, sys
+d = json.loads(sys.argv[1])
+expected = {".opencode/commands/speckit.%s.md" % c for c in
+            ("constitution", "specify", "plan", "tasks", "implement", "converge")}
+modified = set((d.get("manifests", {}).get("opencode", {}) or {}).get("modified_files", []))
+if d.get("missing_managed_files", 0):
+    sys.exit(4)
+if modified - expected:
+    sys.exit(3)
+sys.exit(0)
+' "$_int" || _int_rc=$?
+      case "$_int_rc" in
+        0) line "${G}ok${X}    specify integration status: only the preset's six commands differ (expected)" ;;
+        3) line "${Y}DIFF${X}  specify reports a modified managed file outside the preset's six — re-install"; drift=1 ;;
+        4) line "${R}MISS${X}  specify reports missing managed command files — re-install"; drift=1 ;;
+        *) line "${D}skip${X}  specify integration status did not return parseable JSON" ;;
+      esac
+    fi
+  fi
+
   # 5. command contributions ----------------------------------------------------
   # The composed commands carry the preset's prepends. If the preset drifted, so did
   # these — but check the ones that exist so a missing file is visible too.
-  local missing=0
-  for c in specify plan tasks implement converge; do
-    [ -f "$root/.opencode/commands/speckit.$c.md" ] || missing=$((missing+1))
+  local missing=0 stripped=0
+  for c in constitution specify plan tasks implement converge; do
+    _f="$root/.opencode/commands/speckit.$c.md"
+    if [ ! -f "$_f" ]; then
+      missing=$((missing+1))
+    elif ! grep -q '<!-- Source: spec-driven-development -->' "$_f"; then
+      # The file exists but the preset's prepend is gone — this is what `specify init --force`
+      # does when it rewrites a command. Presence alone cannot see it.
+      stripped=$((stripped+1))
+    fi
   done
-  [ "$missing" -eq 0 ] \
-    && line "${G}ok${X}    all 5 contributed commands present" \
-    || { line "${R}MISS${X}  $missing contributed command file(s)"; drift=1; }
+  if [ "$missing" -gt 0 ]; then
+    line "${R}MISS${X}  $missing contributed command file(s)"; drift=1
+  elif [ "$stripped" -gt 0 ]; then
+    line "${Y}DIFF${X}  $stripped contributed command(s) lost the preset prepend — re-install"; drift=1
+  else
+    line "${G}ok${X}    all 6 contributed commands present and carrying the prepend"
+  fi
 
   # 6. template conformance — a section the template requires and the constitution lacks is a
   #    GOVERNANCE DECISION, not drift. This is the door a real project came through: the preset

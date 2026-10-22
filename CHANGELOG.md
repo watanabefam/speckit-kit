@@ -5,7 +5,7 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 The preset version lives in `preset/preset.yml` and is what `specify preset info` reports.
 
-## [Unreleased]
+## [1.14.0] — 2026-10-21
 
 ### Fixed — a skipped section could read as a passing one
 
@@ -15,10 +15,12 @@ identical to one that did all of it. The flaky-test literature is blunt about th
 not run provides no signal, and reporting it as a pass converts a missing capability into a green
 build.
 
-- **Skips are counted and named.** A `skip()` helper replaces the raw `printf` calls, and the final
-  verdict reads `SELF-GATE: PASS -- but N section(s) were SKIPPED, and a skip is not a pass`. The
-  skipped sections are still listed inline. The build still exits 0 — the point is that it can no
-  longer be *misread*, not that an optional integration should fail an install.
+- **Skips are counted and named, and the verdict has three states.** The helper that was supposed to
+  do this read `skip() { SKIP_COUNT=$((SKIP_COUNT+1)); skip '%s' "$*"; }` — a self-call, so the first
+  skipped section recursed until the stack died instead of reporting anything. It now counts, prints
+  the name, and records it; the verdict is `PASS`, `FAIL` or `INCOMPLETE`, and a skip can no longer
+  be printed as `PASS`. `--strict` turns a skipped section into a non-zero exit for CI; the default
+  keeps the historical exit code, because a missing optional tool must not fail an adopter's build.
 - **CI installs the dependency instead of skipping.** The template resolver needs PyYAML and
   GitHub's macOS runner ships a system python3 without it, so the section-integrity fixture was
   skipping there — meaning CI had never actually exercised the check. The workflow now installs
@@ -109,7 +111,45 @@ fix.
   present while still exiting 0**, and that `speckit-init` still wires it. The skip path is the
   contract that matters: this must not be able to fail someone's install.
 
-Nothing yet.
+### Fixed — the guards fail closed, and no longer depend on `jq`
+
+Every one of the four hook bodies began with `command -v jq >/dev/null 2>&1 || exit 0`. On a machine
+without `jq` the entire mechanical layer was inert, and the installer never checked. The guards now
+parse the payload with `python3` (already required by the installer and `speckit-resume`), and an
+unparseable payload exits **2** with a reason instead of allowing the action. A guard that cannot
+read its input must refuse, not guess.
+
+`self-gate.sh` now extracts each hook body from the YAML and executes it: block/allow/malformed for
+the commit guard and the write guard, plus the commit guard with a `PATH` that has `python3` but no
+`jq` — the exact condition that used to switch enforcement off.
+
+### Fixed — a brownfield install receives the permission boundary
+
+An existing `opencode.json` produced only printed advice, so the project that most needed the
+boundary got none. The installer now merges the `permission` key **additively**: every pre-existing
+key is preserved, a `.bak` copy is written, and a file that already defines `permission` is left
+alone (the owner's policy is not ours to overwrite). `.jsonc` with comments stays print-only, and
+says why.
+
+### Fixed — the drift checker sees what is actually installed
+
+`speckit-check` called a repo "current" without looking at the installed surface. It now reports
+drift when the autonomy contract, the permission boundary, `scripts/verify`, or the preset prepend in
+any of the six composed commands is missing. Presence alone was not enough: `specify init --force`
+can leave the file and drop the prepend, so the marker is checked.
+
+### Fixed — a ledger must name the plan it is evidence for
+
+`speckit-resume` trusted any `Task N: complete` line. It now reads the `# Progress — plan:` header
+and refuses (exit 2, no `RESUME`) when it names a different plan. Ledgers without a header still
+resume, so older projects are not broken. A `Task N: complete` line with no parenthesised evidence
+is reported as a note — a completion claim is not evidence — without stranding the resume.
+
+### Changed — the installer describes the work it actually performs
+
+"re-running init to refresh" implied a CLI refresh that never happened; it now says the kit's files
+are refreshed and the CLI scaffolding is not re-run. The Commands block no longer promises
+`test → lint → typecheck`: `scripts/verify` runs the checks the project actually records.
 
 ## [1.13.0] — 2026-10-18
 

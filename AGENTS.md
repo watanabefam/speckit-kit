@@ -61,7 +61,7 @@ at specs/003-autonomous-throughput/plan.md
 <!-- SPECKIT-COMMANDS START -->
 ## Commands
 
-Detected for this project by `speckit-init`. Run `./scripts/verify` for test → lint → typecheck.
+Detected for this project by `speckit-init`. Run `./scripts/verify` for the checks this project records.
 
 | Purpose | Command |
 | --- | --- |

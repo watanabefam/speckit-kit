@@ -109,7 +109,10 @@ fi
 
 # --- 2. Project scaffolding ---------------------------------------------------
 if [[ -d "$ROOT/.specify" ]]; then
-  say ".specify/ already present — re-running init to refresh"
+  # It does NOT re-run `specify init` here (that would need --force and can overwrite the
+  # project's own edits). Say what actually happens: the kit's files are refreshed, the CLI
+  # scaffolding is left alone.
+  say ".specify/ already present — refreshing the kit's files (CLI scaffolding is not re-run)"
 else
   if [[ -n "$(git -C "$ROOT" status --porcelain 2>/dev/null || true)" ]]; then
     warn "uncommitted changes in $ROOT — commit or stash first so the diff is reviewable"
@@ -184,10 +187,16 @@ if [[ -f "$HOOK_SRC" ]]; then
     say "installed project hooks (block --no-verify; protect generated files)"
   elif cmp -s "$HOOK_SRC" "$HOOK_DST"; then
     say "project hooks already current"
+  elif head -1 "$HOOK_DST" 2>/dev/null | grep -q '^# spec-driven-development'; then
+    # It IS ours (it carries the kit's header), just an older copy. Leaving it meant an
+    # adopter who installed before a guard was fixed kept the old, weaker guard forever.
+    cp "$HOOK_DST" "$HOOK_DST.bak"
+    cp "$HOOK_SRC" "$HOOK_DST"
+    say "updated the kit's project hooks to this version (backup: hooks.yaml.bak)"
   else
     # Never clobber a hooks file we did not write — the project's own hooks live there.
     warn "existing .opencode/hook/hooks.yaml left untouched (it is not ours)."
-    warn "  to adopt the kit's two hooks, merge them from $HOOK_SRC"
+    warn "  to adopt the kit's hooks, merge them from $HOOK_SRC"
   fi
   if [[ -f "$HOOK_DST" ]] && ! $PLUGIN_SEEN; then
     warn "hooks installed but INERT: the '$HOOK_PLUGIN' plugin is not in any opencode config."
@@ -204,17 +213,56 @@ fi
 # and version-controllable with the project.
 #
 # opencode evaluates the rules in order and the LAST match wins, so the catch-all is
-# first and the specific denies are last. An existing opencode.json is never
-# clobbered: the block is printed with a merge instruction instead.
+# first and the specific denies are last.
+#
+# Brownfield is the common case, and it used to be the UNPROTECTED case: an existing
+# opencode.json only produced advice, so the project that most needed the boundary got
+# none. The merge is ADDITIVE and non-destructive: every pre-existing key is preserved,
+# a .bak copy is written, and a pre-existing "permission" key is left alone (we cannot
+# know which of its rules the owner chose deliberately).
 PERM_SRC="$KIT_ROOT/permissions/opencode-permission.jsonc"
 OC_JSON="$ROOT/opencode.json"
 OC_JSONC="$ROOT/opencode.jsonc"
+merge_permission_block() {
+  python3 - "$1" "$PERM_SRC" <<'PY'
+import json, os, shutil, sys
+target, src = sys.argv[1], sys.argv[2]
+try:
+    with open(target) as f:
+        data = json.load(f)
+except Exception:
+    sys.exit(3)          # not plain JSON (or unreadable): never rewrite it
+with open(src) as f:
+    kit = json.load(f)
+if not isinstance(data, dict):
+    sys.exit(3)
+if "permission" in data:
+    sys.exit(4)          # owner already has a policy; do not overwrite it
+data["permission"] = kit["permission"]
+shutil.copy2(target, target + ".bak")
+tmp = target + ".tmp"
+with open(tmp, "w") as f:
+    json.dump(data, f, indent=2)
+    f.write("\n")
+os.replace(tmp, target)
+PY
+}
 if [[ -f "$PERM_SRC" ]]; then
-  if [[ -f "$OC_JSON" || -f "$OC_JSONC" ]]; then
-    EXISTING="$OC_JSON"; [[ -f "$EXISTING" ]] || EXISTING="$OC_JSONC"
-    warn "existing $(basename "$EXISTING") left untouched (it is not ours)."
-    warn "  to adopt the kit's permission boundary, merge the \"permission\" key from:"
-    warn "    $PERM_SRC"
+  if [[ -f "$OC_JSON" ]]; then
+    _merge_rc=0
+    merge_permission_block "$OC_JSON" || _merge_rc=$?
+    case "$_merge_rc" in
+      0) say "merged the permission boundary into existing opencode.json (backup: opencode.json.bak)" ;;
+      4) warn "existing opencode.json already defines \"permission\" — left unchanged."
+         warn "  the kit's deny rules may be missing; compare $PERM_SRC" ;;
+      *) warn "existing opencode.json is not plain JSON (or is unreadable) — left untouched."
+         warn "  add the \"permission\" key from: $PERM_SRC" ;;
+    esac
+  elif [[ -f "$OC_JSONC" ]]; then
+    # A .jsonc with comments cannot be round-tripped without destroying the comments,
+    # so this stays print-only. Say WHY, so it is a known limit rather than a silent gap.
+    warn "existing opencode.jsonc left untouched (comments cannot be merged safely)."
+    warn "  add the \"permission\" key from: $PERM_SRC"
   else
     cp "$PERM_SRC" "$OC_JSON"
     say "installed opencode.json permission boundary (deny force-push / publish / destructive DB)"
@@ -444,7 +492,7 @@ fi
 CMDS_FILE="$(mktemp)"
 {
   printf '## Commands\n\n'
-  printf 'Detected for this project by `speckit-init`. Run `./scripts/verify` for test → lint → typecheck.\n\n'
+  printf 'Detected for this project by `speckit-init`. Run `./scripts/verify` for the checks this project records.\n\n'
   printf '| Purpose | Command |\n| --- | --- |\n'
   cmd_row install "$CMD_INSTALL"
   cmd_row test "$CMD_TEST"

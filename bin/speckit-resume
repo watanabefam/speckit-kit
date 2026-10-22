@@ -30,10 +30,10 @@ if [ ! -f "$TASKS" ]; then
   exit 2
 fi
 
-python3 - "$TASKS" "$LEDGER" <<'PY'
+python3 - "$TASKS" "$LEDGER" "$SPEC" <<'PY'
 import os, re, sys
 
-tasks_path, ledger_path = sys.argv[1], sys.argv[2]
+tasks_path, ledger_path, spec_dir = sys.argv[1], sys.argv[2], sys.argv[3]
 
 # Task order comes from tasks.md; ids are matched numerically so `T003` and `Task 3`
 # are the same task.
@@ -43,14 +43,52 @@ for line in open(tasks_path, encoding="utf-8"):
     if m:
         tasks.append((int(m.group(2)), m.group(1)))
 
+# Identity first: a ledger that names a DIFFERENT plan is not evidence about this one.
+# Backward compatible — a ledger with no header still resumes (older projects), but a
+# header that names another plan is refused rather than silently trusted.
+if os.path.exists(ledger_path):
+    with open(ledger_path, encoding="utf-8") as f:
+        for _ in range(5):
+            head = f.readline()
+            if not head:
+                break
+            m = re.match(r"#\s*Progress\s*[\u2014\u2013-]\s*plan:\s*(\S+)", head)
+            if m:
+                declared = m.group(1).strip()
+                expected = os.path.normpath(os.path.join(spec_dir, "plan.md"))
+                if os.path.isabs(declared):
+                    same = os.path.realpath(declared) == os.path.realpath(expected)
+                else:
+                    same = os.path.normpath(declared) == expected
+                if not same:
+                    print(
+                        "ledger names %s, not %s — refusing to resume (wrong plan's evidence)"
+                        % (declared, expected),
+                        file=sys.stderr,
+                    )
+                    sys.exit(2)
+                break
+
 # Completion comes from the ledger, and only from a `complete` line. A `fix round n/m`
 # line is explicitly not completion.
 done = set()
+unbacked = []
 if os.path.exists(ledger_path):
     for line in open(ledger_path, encoding="utf-8"):
         m = re.match(r"\s*Task (\d+): complete\b", line)
         if m:
             done.add(int(m.group(1)))
+            # "complete" alone is a claim. Evidence is the parenthesised reason. Warn, do
+            # not fail: older ledgers predate the convention, and stranding a resume would
+            # be a worse defect than the claim it is flagging.
+            if not re.search(r"complete\s*\(\s*\S", line):
+                unbacked.append(int(m.group(1)))
+if unbacked:
+    print(
+        "note: Task %s recorded complete with no evidence in parentheses — completion claims are not evidence"
+        % ", ".join(str(n) for n in unbacked),
+        file=sys.stderr,
+    )
 
 for num, tid in tasks:
     if num not in done:

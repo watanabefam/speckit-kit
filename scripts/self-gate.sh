@@ -15,7 +15,14 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 E2E=1
-[ "${1:-}" = "--no-e2e" ] && E2E=0
+STRICT=0
+for _arg in "$@"; do
+  case "$_arg" in
+    --no-e2e) E2E=0 ;;
+    --strict) STRICT=1 ;;
+    *) echo "unknown option: $_arg" >&2; exit 2 ;;
+  esac
+done
 
 fail=0
 ok()  { printf '  ok    %s\n' "$*"; }
@@ -27,7 +34,43 @@ hdr() { printf '\n== %s ==\n' "$*"; }
 # is blunt about this: a check that did not run provides no signal, and reporting it as a pass
 # converts a missing capability into a green build.)
 SKIP_COUNT=0
-skip() { SKIP_COUNT=$((SKIP_COUNT+1)); skip '%s' "$*"; }
+SKIPPED=""
+# NOTE: this function used to call itself (skip -> skip) and recurse forever. A guard whose
+# failure path is an infinite loop reports nothing and looks like a hang.
+skip() {
+  SKIP_COUNT=$((SKIP_COUNT+1))
+  SKIPPED="${SKIPPED}  - $*"$'\n'
+  printf '  skip  %s\n' "$*"
+}
+
+hdr "0. the gate's own verdict cannot lie"
+# Regression: skip() was written as a self-call, so the FIRST skipped section recursed
+# instead of reporting. The gate then said nothing at all — a guard whose failure path is
+# an infinite loop is worse than no guard, because it looks like a hang, not a gap.
+_rc=0
+python3 - "$0" <<'PY' || _rc=$?
+import re, sys
+s = open(sys.argv[1], encoding="utf-8").read()
+m = re.search(r"(?ms)^skip\(\) \{\n(.*?)^\}", s)
+if not m:
+    sys.exit(2)
+body = re.sub(r"#.*", "", m.group(1))
+body = re.sub(r'"(?:[^"\\]|\\.)*"', '""', body)
+body = re.sub(r"'(?:[^'\\]|\\.)*'", "''", body)
+sys.exit(0 if re.search(r"\bskip\s", body) else 1)
+PY
+case "$_rc" in
+  0) bad "skip() calls itself — the first skipped section would recurse instead of reporting" ;;
+  1) ok "skip() records the skip instead of recursing" ;;
+  *) bad "could not locate skip() in this script — the verdict check is blind" ;;
+esac
+# The old branch set `_verdict="PASS"` whenever there were no hard failures, even with
+# skips. Assert the skip branch can no longer choose that verdict.
+if sed -n '/^if \[ "\$SKIP_COUNT" -gt 0 \]; then$/,/^fi$/p' "$0" | grep -q '_verdict="PASS"'; then
+  bad "the skip branch can still choose the PASS verdict"
+else
+  ok "the skip branch cannot choose the PASS verdict"
+fi
 
 hdr "1. installer parses under this bash ($BASH_VERSION)"
 if bash -n "$ROOT/bin/speckit-init"; then
@@ -308,6 +351,74 @@ PY
     done
     [ "$dc_fail" = "0" ] && ok "destructive predicate blocks 8 irreversible forms, allows 6 benign (segment-guarded)"
   fi
+  # ── Hook BODY behaviour, not just the awk predicate ────────────────────────
+  # The predicate can be perfect while the body around it stands aside: every guard used to
+  # start with `command -v jq || exit 0`, so a machine without jq had NO mechanical layer
+  # and said nothing. These probes execute the real body with real payloads.
+  _hook_body() {
+    python3 - "$HK" "$1" <<'PY'
+import re, sys
+raw = open(sys.argv[1]).read()
+i = re.search(r"^\s*- id: " + re.escape(sys.argv[2]) + r"\s*$", raw, re.M)
+if not i:
+    sys.exit(1)
+m = re.search(r"command: \|\n(.*?)\n\s*timeout:", raw[i.start():], re.S)
+if not m:
+    sys.exit(1)
+lines = m.group(1).split("\n")
+ind = min(len(l) - len(l.lstrip()) for l in lines if l.strip())
+print("\n".join(l[ind:] for l in lines))
+PY
+  }
+  _hook_rc() {
+    local _rc
+    if [ -n "${3:-}" ]; then
+      if printf '%s' "$2" | PATH="$3" "$BASH" -c "$1" >/dev/null 2>&1; then _rc=0; else _rc=$?; fi
+    else
+      if printf '%s' "$2" | "$BASH" -c "$1" >/dev/null 2>&1; then _rc=0; else _rc=$?; fi
+    fi
+    printf '%s' "$_rc"
+  }
+  _commit_body="$(_hook_body block-commit-no-verify)" || _commit_body=""
+  _write_body="$(_hook_body protect-generated-files)" || _write_body=""
+  if [ -z "$_commit_body" ] || [ -z "$_write_body" ]; then
+    bad "could not extract a hook body — the gate cannot prove the guards run"
+  else
+    _probe_fail=0
+    _block='{"tool_name":"bash","tool_args":{"command":"git commit --no-verify -m x"}}'
+    _allow='{"tool_name":"bash","tool_args":{"command":"git commit -m x"}}'
+    _junk='not json, but mentions commit'
+    [ "$(_hook_rc "$_commit_body" "$_block")" = "2" ] \
+      || { bad "commit guard body ALLOWS --no-verify in a valid payload"; _probe_fail=1; }
+    [ "$(_hook_rc "$_commit_body" "$_allow")" = "0" ] \
+      || { bad "commit guard body BLOCKS a benign commit"; _probe_fail=1; }
+    [ "$(_hook_rc "$_commit_body" "$_junk")" = "2" ] \
+      || { bad "commit guard body fails OPEN on an unparseable payload"; _probe_fail=1; }
+    # The exact failure this replaces: no jq on PATH. Build a PATH with python3 but no jq.
+    _tmpbin="$(mktemp -d)"
+    for _b in python3 cat tr awk grep sed; do
+      _bp="$(command -v "$_b" 2>/dev/null || true)"
+      [ -n "$_bp" ] && ln -s "$_bp" "$_tmpbin/$_b" 2>/dev/null || true
+    done
+    if [ ! -e "$_tmpbin/jq" ]; then
+      [ "$(_hook_rc "$_commit_body" "$_block" "$_tmpbin")" = "2" ] \
+        || { bad "commit guard body stands aside when jq is absent (the old fail-open)"; _probe_fail=1; }
+    else
+      bad "test harness leaked jq into the no-jq PATH"
+      _probe_fail=1
+    fi
+    rm -rf "$_tmpbin"
+    _wblock='{"tool_name":"write","tool_args":{"filePath":".opencode/commands/speckit.plan.md"}}'
+    _wallow='{"tool_name":"write","tool_args":{"filePath":"specs/004-reliability-hardening/spec.md"}}'
+    _wjunk='not json, but says "write"'
+    [ "$(_hook_rc "$_write_body" "$_wblock")" = "2" ] \
+      || { bad "write guard body ALLOWS an edit to a generated command"; _probe_fail=1; }
+    [ "$(_hook_rc "$_write_body" "$_wallow")" = "0" ] \
+      || { bad "write guard body BLOCKS an edit to specs/"; _probe_fail=1; }
+    [ "$(_hook_rc "$_write_body" "$_wjunk")" = "2" ] \
+      || { bad "write guard body fails OPEN on an unparseable payload"; _probe_fail=1; }
+    [ "$_probe_fail" = "0" ] && ok "guard bodies block 2/2, allow 2/2, fail closed on 2 malformed payloads, and need no jq"
+  fi
   # It must not protect the files that are MEANT to be edited.
   if grep -q ".specify/memory/constitution.md" "$HK" && grep -q "ALLOW" "$HK"; then
     ok "hook file documents the allow-list (constitution + specs are editable)"
@@ -352,7 +463,7 @@ if [ -x "$CK" ]; then
   # It must know about every component the installer ships, or it will report
   # 'current' while a repo is missing something.
   missing=""
-  for c in "speckit.md" "hooks/speckit-hooks.yaml" "AGENTS.md" "preset/preset.yml"; do
+  for c in "speckit.md" "hooks/speckit-hooks.yaml" "AGENTS.md" "preset/preset.yml" "autonomy-contract.md" "scripts/verify"; do
     grep -q "$c" "$CK" || missing="$missing $c"
   done
   if [ -z "$missing" ]; then
@@ -435,6 +546,31 @@ PY
   else
     bad "content drift at unchanged version reported as current (exit $rc, want 1)"
   fi
+  # (c) installed-surface drift. Each of these was absent from the checker, so a repo could
+  # lose the enforcement claim and still be told it was current.
+  _surface_fail=0
+  for _probe in contract permission prepend; do
+    "$ROOT/bin/speckit-init" "$TD" >/dev/null 2>&1 || true
+    case "$_probe" in
+      contract) rm -f "$TD/.opencode/autonomy-contract.md" ;;
+      permission) rm -f "$TD/opencode.json" ;;
+      prepend)
+        python3 - "$TD/.opencode/commands/speckit.specify.md" <<'PY'
+import sys
+p = sys.argv[1]
+s = open(p, encoding="utf-8").read()
+s = s.replace("<!-- Source: spec-driven-development -->", "<!-- prepend removed by probe -->", 1)
+open(p, "w", encoding="utf-8").write(s)
+PY
+        ;;
+    esac
+    _rc=0; bash "$CK" "$TD" >/dev/null 2>&1 || _rc=$?
+    if [ "$_rc" != "1" ]; then
+      bad "speckit-check missed a missing $_probe (exit $_rc, want 1)"
+      _surface_fail=1
+    fi
+  done
+  [ "$_surface_fail" = "0" ]     && ok "speckit-check flags a missing contract, permission boundary and preset prepend"
   rm -rf "$TD"
   TMPD="$(mktemp -d)"; mkdir -p "$TMPD/.specify"
   rc=2
@@ -525,6 +661,27 @@ if not bad:
             prev = cur
 if not bad:
     print("  ok    targeted interrupt: resume is monotone and completes no task twice")
+
+# --- identity: the ledger must be evidence about THIS plan ---
+if not bad:
+    d = tempfile.mkdtemp(prefix="resume-id-")
+    open(os.path.join(d, "tasks.md"), "w").write(mk(2))
+    open(os.path.join(d, "progress.md"), "w").write(
+        "# Progress — plan: specs/999-other/plan.md\nTask 1: complete (x)\n")
+    r = subprocess.run([rs, d], capture_output=True, text=True)
+    if r.returncode != 2 or "RESUME" in r.stdout:
+        print(f"  FAIL  identity: wrong-plan ledger not refused (rc={r.returncode}, out={r.stdout!r})")
+        bad = 1
+    else:
+        # A matching header still resumes: the check must not break the normal path.
+        open(os.path.join(d, "progress.md"), "w").write(
+            f"# Progress — plan: {os.path.join(d, 'plan.md')}\nTask 1: complete (x)\n")
+        r2 = subprocess.run([rs, d], capture_output=True, text=True)
+        if r2.returncode != 0 or r2.stdout.strip() != "RESUME T002":
+            print(f"  FAIL  identity: matching header did not resume ({r2.returncode}, {r2.stdout!r})")
+            bad = 1
+        else:
+            print("  ok    refuses a wrong-plan ledger, still resumes a matching one")
 
 sys.exit(bad)
 PY
@@ -1077,6 +1234,48 @@ PY
       diff "$N/opencode.json.before" "$N/opencode.json" | sed 's/^/        /' | head -10
     fi
     rm -rf "$N"
+    # FR-003: brownfield with NO permission key gets the boundary, additively.
+    M="$(mktemp -d)"
+    git init -q "$M"
+    printf '{\n  "plugin": ["x"],\n  "theme": "dark"\n}\n' > "$M/opencode.json"
+    ( cd "$M" && git add -A && git -c user.email=e@e -c user.name=e commit -qm init )
+    "$ROOT/bin/speckit-init" "$M" >/dev/null 2>&1 || true
+    if python3 - "$M/opencode.json" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1], encoding="utf-8"))
+ok = (d.get("plugin") == ["x"] and d.get("theme") == "dark"
+      and isinstance(d.get("permission"), dict)
+      and d["permission"].get("bash", {}).get("git push*--force*") == "deny")
+sys.exit(0 if ok else 1)
+PY
+    then
+      ok "brownfield opencode.json gained the permission boundary without losing a key"
+    else
+      bad "brownfield install did not add the permission boundary additively"
+    fi
+    if [ -f "$M/opencode.json.bak" ]; then
+      ok "brownfield merge wrote a backup before rewriting"
+    else
+      bad "brownfield merge rewrote opencode.json with no .bak"
+    fi
+    cp "$M/opencode.json" "$M/opencode.json.after1"
+    "$ROOT/bin/speckit-init" "$M" >/dev/null 2>&1 || true
+    if cmp -s "$M/opencode.json" "$M/opencode.json.after1"; then
+      ok "second install leaves the merged permission block unchanged"
+    else
+      bad "second install altered the merged permission block"
+    fi
+    # An OLDER KIT hooks.yaml (same header, older body) must be upgraded, not preserved.
+    # Before this, the installer treated every byte-difference as "the project's file", so
+    # a guard fix never reached anyone who had installed an earlier version.
+    printf '# spec-driven-development — project hooks\n# an older kit copy\n' > "$M/.opencode/hook/hooks.yaml"
+    "$ROOT/bin/speckit-init" "$M" >/dev/null 2>&1 || true
+    if cmp -s "$ROOT/hooks/speckit-hooks.yaml" "$M/.opencode/hook/hooks.yaml"; then
+      ok "an older kit hooks.yaml is upgraded to the current guards"
+    else
+      bad "an older kit hooks.yaml was left in place — the guard fix would never reach an adopter"
+    fi
+    rm -rf "$M"
     # FR-015: a managed block edited since install is reported on the next install.
     D="$(mktemp -d)"
     git init -q "$D"
@@ -1084,6 +1283,19 @@ PY
     printf '{"name":"d","scripts":{"test":"node -e 0"}}\n' > "$D/package.json"
     ( cd "$D" && git add -A && git -c user.email=e@e -c user.name=e commit -qm init )
     "$ROOT/bin/speckit-init" "$D" >/dev/null 2>&1 || true
+    # The Commands block records `npm test`, so the installer must have generated a runner.
+    if [ -f "$D/scripts/verify" ]; then
+      mv "$D/scripts/verify" "$D/scripts/verify.probe"
+      _rc=0; bash "$ROOT/bin/speckit-check" "$D" >/dev/null 2>&1 || _rc=$?
+      if [ "$_rc" = "1" ]; then
+        ok "speckit-check flags a recorded project whose scripts/verify is missing"
+      else
+        bad "missing scripts/verify reported as current (exit $_rc, want 1)"
+      fi
+      mv "$D/scripts/verify.probe" "$D/scripts/verify"
+    else
+      bad "fixture with a recorded test command did not generate scripts/verify"
+    fi
     python3 - "$D/AGENTS.md" <<'PY'
 import sys
 p = sys.argv[1]; s = open(p).read()
@@ -1263,9 +1475,16 @@ fi
 
 printf '\n'
 if [ "$SKIP_COUNT" -gt 0 ]; then
-  _verdict="FAIL"; [ "$fail" = "0" ] && _verdict="PASS"
-  printf 'SELF-GATE: %s -- but %s section(s) were SKIPPED, and a skip is not a pass:\n' "$_verdict" "$SKIP_COUNT"
-  printf '  (the skipped sections are listed above; the build did not exercise them)\n'
+  # Three states, not two: a skipped section means the gate did LESS than it claims, so it must
+  # never print "PASS". --strict makes that visible to CI; the default keeps the historical exit
+  # code so an existing pipeline is not broken by a missing optional tool.
+  if [ "$fail" = "0" ]; then _verdict="INCOMPLETE"; else _verdict="FAIL"; fi
+  printf 'SELF-GATE: %s -- %s section(s) were SKIPPED (a skip is not a pass):\n' "$_verdict" "$SKIP_COUNT"
+  printf '%s' "$SKIPPED"
+  if [ "$STRICT" = "1" ] && [ "$fail" = "0" ]; then
+    printf '  (--strict: a skipped section is a non-zero exit)\n'
+    fail=1
+  fi
 else
   if [ "$fail" = "0" ]; then echo "SELF-GATE: PASS"; else echo "SELF-GATE: FAIL"; fi
 fi

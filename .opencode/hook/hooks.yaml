@@ -48,8 +48,18 @@ hooks:
               *) exit 0 ;;
             esac
 
-            command -v jq >/dev/null 2>&1 || exit 0
-            cmd=$(printf '%s' "$payload" | jq -r '.tool_args.command // empty' 2>/dev/null)
+            # python3, not jq. The installer and speckit-resume already require python3, and a
+            # missing jq made this guard `exit 0` — it stood aside exactly when it was needed.
+            # A guard that cannot read its input must refuse, not allow.
+            if ! command -v python3 >/dev/null 2>&1; then
+              echo "BLOCKED: the speckit guard needs python3 to read the tool payload." >&2
+              exit 2
+            fi
+            # Single line, because a YAML literal block's content may not fall back to column 0.
+            cmd=$(printf '%s' "$payload" | python3 -c 'import json,sys;d=json.load(sys.stdin);a=d.get("tool_args") or {};v=a.get("command") or d.get("command") or "";print(v if isinstance(v,str) else "")' 2>/dev/null) || {
+              echo "BLOCKED: could not parse the tool payload; refusing rather than guessing." >&2
+              exit 2
+            }
             [ -z "$cmd" ] && exit 0
 
             # Strip quote characters first: a quoted flag ('--no-verify') survives
@@ -135,8 +145,14 @@ hooks:
               *) exit 0 ;;
             esac
 
-            command -v jq >/dev/null 2>&1 || exit 0
-            tool=$(printf '%s' "$payload" | jq -r '.tool_name // empty' 2>/dev/null)
+            if ! command -v python3 >/dev/null 2>&1; then
+              echo "BLOCKED: the speckit guard needs python3 to read the tool payload." >&2
+              exit 2
+            fi
+            tool=$(printf '%s' "$payload" | python3 -c 'import json,sys;d=json.load(sys.stdin);t=d.get("tool_name") or "";print(t if isinstance(t,str) else "")' 2>/dev/null) || {
+              echo "BLOCKED: could not parse the tool payload; refusing rather than guessing." >&2
+              exit 2
+            }
             case "$tool" in
               write|edit|multiedit|patch|apply_patch) : ;;
               *) exit 0 ;;
@@ -147,19 +163,12 @@ hooks:
             # guard reads `.tool_args.command`) and the root, because a
             # multiedit-style payload nests its targets differently and an
             # unlisted shape means the edit is silently unprotected.
-            paths=$(printf '%s' "$payload" | jq -r '
-              [ .tool_args.filePath?,
-                .tool_args.file_path?,
-                .tool_args.path?,
-                (.tool_args.changes[]?.path?),
-                (.tool_args.changes[]?.toPath?),
-                (.tool_args.files[]?.filePath?),
-                (.tool_args.files[]?.path?),
-                (.changes[]?.path?),
-                (.changes[]?.toPath?),
-                (.files[]?.filePath?),
-                (.files[]?.path?) ]
-              | map(select(. != null and . != "")) | .[]' 2>/dev/null || true)
+            # Same path set as the jq version: filePath/file_path/path at the root and tool_args,
+            # plus changes[] and files[] (both shapes). Kept on one line for the YAML block scalar.
+            paths=$(printf '%s' "$payload" | python3 -c 'import json,sys;d=json.load(sys.stdin);a=d.get("tool_args") or {};L=lambda x:x if isinstance(x,list) else [];out=[];[out.append(v) for k in ("filePath","file_path","path") for v in (a.get(k),d.get(k)) if isinstance(v,str) and v];[out.append(it.get(ik)) for k in ("changes","files") for cont in (a.get(k),d.get(k)) for it in L(cont) if isinstance(it,dict) for ik in ("path","toPath","filePath") if isinstance(it.get(ik),str) and it.get(ik)];print("\n".join(out))' 2>/dev/null) || {
+              echo "BLOCKED: could not parse the tool payload; refusing rather than guessing." >&2
+              exit 2
+            }
             [ -z "$paths" ] && exit 0
 
             # DEFAULTED, deliberately. The plugin exports no OPENCODE_PROJECT_DIR
@@ -222,8 +231,18 @@ hooks:
               *) exit 0 ;;
             esac
 
-            command -v jq >/dev/null 2>&1 || exit 0
-            cmd=$(printf '%s' "$payload" | jq -r '.tool_args.command // empty' 2>/dev/null)
+            # python3, not jq. The installer and speckit-resume already require python3, and a
+            # missing jq made this guard `exit 0` — it stood aside exactly when it was needed.
+            # A guard that cannot read its input must refuse, not allow.
+            if ! command -v python3 >/dev/null 2>&1; then
+              echo "BLOCKED: the speckit guard needs python3 to read the tool payload." >&2
+              exit 2
+            fi
+            # Single line, because a YAML literal block's content may not fall back to column 0.
+            cmd=$(printf '%s' "$payload" | python3 -c 'import json,sys;d=json.load(sys.stdin);a=d.get("tool_args") or {};v=a.get("command") or d.get("command") or "";print(v if isinstance(v,str) else "")' 2>/dev/null) || {
+              echo "BLOCKED: could not parse the tool payload; refusing rather than guessing." >&2
+              exit 2
+            }
             [ -z "$cmd" ] && exit 0
 
             # Strip quote characters first: a quoted flag ('-f') survives tokenisation
@@ -275,8 +294,18 @@ hooks:
               *) exit 0 ;;
             esac
 
-            command -v jq >/dev/null 2>&1 || exit 0
-            cmd=$(printf '%s' "$payload" | jq -r '.tool_args.command // empty' 2>/dev/null)
+            # python3, not jq. The installer and speckit-resume already require python3, and a
+            # missing jq made this guard `exit 0` — it stood aside exactly when it was needed.
+            # A guard that cannot read its input must refuse, not allow.
+            if ! command -v python3 >/dev/null 2>&1; then
+              echo "BLOCKED: the speckit guard needs python3 to read the tool payload." >&2
+              exit 2
+            fi
+            # Single line, because a YAML literal block's content may not fall back to column 0.
+            cmd=$(printf '%s' "$payload" | python3 -c 'import json,sys;d=json.load(sys.stdin);a=d.get("tool_args") or {};v=a.get("command") or d.get("command") or "";print(v if isinstance(v,str) else "")' 2>/dev/null) || {
+              echo "BLOCKED: could not parse the tool payload; refusing rather than guessing." >&2
+              exit 2
+            }
             [ -z "$cmd" ] && exit 0
             cmd=$(printf '%s' "$cmd" | tr -d '\42\47')
 
