@@ -152,6 +152,15 @@ description: "Task list template for feature implementation"
 
 ---
 
+## Parallel Example: User Story 1
+
+```bash
+# The three addenda are separate files, so the EARS rules can be written while the property
+# and task rules are still being drafted:
+Task: "Add the five EARS patterns to preset/templates/spec-addendum.md"
+Task: "Add the Correctness Properties section to preset/templates/plan-addendum.md"
+```
+
 ## Parallel Example: User Story 2
 
 ```bash
@@ -417,6 +426,35 @@ Coverage: 11 mapped + 1 opted-out (FR-009) = 12/12 = 100% accounted for.
 - Distinguish implementation, test, migration, documentation, and validation work (T008–T012 implementation vs T013 test; T033–T035 validation; T029–T031 docs/version; no migrations).
 - State the evidence that marks a task complete (grep / gate / trial, not "looks right").
 - Identify migrations and sequencing constraints explicitly (no migrations; sequencing: Foundational → US1 → US2 → US3 → Polish).
+
+## Property-Based Test Tasks
+
+If `plan.md` carries a `## Correctness Properties` table, every property gets exactly one
+property-based test task.
+
+- **One task per P-ID.** A property with no task is unbuilt; a task with no P-ID is scope creep.
+- **Trace both IDs.** Each task states its `P-xxx` and the `FR-xxx` it maps to.
+- **Name the framework the plan recorded — never one of your own choosing.** This kit's plan decided
+  `adopt` for downstream projects and *example-based with generated inputs* for its own suite, because a
+  Python dependency would contradict FR-009's no-hardcoded-framework rule.
+- **Co-locate.** A property test sits in the same phase as the behaviour it covers.
+
+### Worked example
+
+```markdown
+## T015: Property test — any EARS requirement has exactly one pattern
+
+- **Objective**: Prove that no requirement text matches two EARS patterns at once.
+- **Addresses requirement(s)**: FR-001 (P-001)
+- **Implements design decision(s)**: Plan's Framework decision — example-based, generated inputs.
+- **Depends on**: T008
+- **Likely files**: `evals/` harness for this suite
+- **Scope boundaries**: Do not change the pattern definitions; test them.
+- **Expected output**: Property `for any requirement line, at most one pattern matches`.
+- **Verification**: runs over the five-pattern corpus; then remove one pattern and confirm failure.
+- **Completion conditions**: P-001 passes, and fails when a pattern is removed.
+- **Risks / rollback**: Test-only; revert the file.
+```
 
 ## Requirement Coverage
 

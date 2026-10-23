@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-04
 
-**Status**: Draft
+**Status**: Accepted (owner approved 2026-10-23, after the conformance amendment)
 
 **Input**: User description: "Add EARS-notation requirements and property-based correctness properties to this kit, so specifications become executable. Requirements in specs/<feature>/spec.md should be written in EARS form: WHEN <trigger> THE SYSTEM SHALL <response>, plus the other EARS patterns (ubiquitous, state-driven, unwanted-behaviour, optional-feature). The plan should gain a Correctness Properties section mapping each testable requirement to a universally-quantified property that begins 'for any'. Tasks should require a property-based test per property, using the project's existing property-based testing framework where one exists. Must stay language-agnostic - do not hardcode Hypothesis, name the framework per project. Must NOT make properties mandatory for requirements that do not map cleanly to a property. Rationale: no preset in the spec-kit community has ported EARS or property-based testing (verified 0 of 41), and template-plus-verification features do not depend on a skill loading."
 
@@ -14,8 +14,8 @@
 (Draft; no researched companion document was written for this feature)
 
 **Lifecycle for the core `Status` field:** `Draft` → `Accepted` → `Deprecated` | `Superseded by <id>`.
-This feature has been implemented (the templates it adds are in use and asserted by the gate) but its
-`Status` field still reads `Draft`, because flipping it is the owner's act.
+**Accepted 2026-10-23** by the owner: the templates it adds are in use, asserted by the gate, and the
+feature's section outline now conforms to the current spec template (`decisions/0004`).
 
 ## Normative Status
 

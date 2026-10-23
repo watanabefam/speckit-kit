@@ -110,6 +110,13 @@ conformance becomes a ritual. A section that does not apply keeps its heading an
 `Not applicable — <reason>`; the gate runs the check over every `specs/*/spec.md`, so drift is a
 failure rather than a discovery. Rationale and sources: `decisions/0004`.
 
+**Plans and task lists too, with recorded exceptions.** `scripts/conformance-baseline.py check` covers
+`spec.md`, `plan.md` and `tasks.md`, and excuses the work records of features accepted before the
+current templates existed — five of them, listed with reasons and **exact counts** in
+`specs/.conformance-baseline.json`. A baselined artifact that gets worse fails, and one that conforms
+again also fails until its entry is removed, so the excuse list can only shrink. `show` prints the
+debt; `decisions/0005` has the reasoning and the sources.
+
 This is the same pattern the community's `toc-navigation` preset uses. `specassay` uses
 `append` alone and has the same latent flaw.
 

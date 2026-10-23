@@ -1,0 +1,57 @@
+{
+  "checker": "scripts/check-section-integrity.sh",
+  "entries": [
+    {
+      "artifact": "specs/002-review-and-stress-gate/plan.md",
+      "counts": {
+        "disordered": 0,
+        "missing": 40,
+        "stubbed": 0
+      },
+      "reason": "Work record of an accepted, implemented feature, written before the current plan template. 40 of 44 headings predate the template; retro-fitting would reformat an accepted record.",
+      "template": "plan-template"
+    },
+    {
+      "artifact": "specs/004-reliability-hardening/plan.md",
+      "counts": {
+        "disordered": 0,
+        "missing": 44,
+        "stubbed": 0
+      },
+      "reason": "Work record of an accepted, implemented feature, authored against the older opencode plan layout: none of the 44 current headings. A rewrite is a new document, not a migration.",
+      "template": "plan-template"
+    },
+    {
+      "artifact": "specs/002-review-and-stress-gate/tasks.md",
+      "counts": {
+        "disordered": 0,
+        "missing": 22,
+        "stubbed": 0
+      },
+      "reason": "Work record of an accepted, implemented feature; 22 of 23 headings predate the template, including the property table, which that feature never had.",
+      "template": "tasks-template"
+    },
+    {
+      "artifact": "specs/003-autonomous-throughput/tasks.md",
+      "counts": {
+        "disordered": 0,
+        "missing": 10,
+        "stubbed": 0
+      },
+      "reason": "Work record of an accepted, implemented feature; 10 of 23 headings missing (parallel examples, task rules, property tasks, coverage table). Deferred as a reformat, not a gap.",
+      "template": "tasks-template"
+    },
+    {
+      "artifact": "specs/004-reliability-hardening/tasks.md",
+      "counts": {
+        "disordered": 0,
+        "missing": 23,
+        "stubbed": 0
+      },
+      "reason": "Work record of an accepted, implemented feature, authored against the older task layout: none of the 23 current headings.",
+      "template": "tasks-template"
+    }
+  ],
+  "note": "Non-conformant artifacts that are work records of accepted, implemented features. Counts must match exactly; an artifact that conforms again is a stale entry and fails the gate.",
+  "recorded": "2026-10-23"
+}

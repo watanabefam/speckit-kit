@@ -1467,25 +1467,35 @@ else
   rm -rf "$SICD"
 fi
 
-# The standing corpus, not a fixture: every spec in this repository conforms to the spec template.
-# Before this assertion existed, all six failed and nothing said so — a structure check shipped with
-# no gate behind it is the same defect this kit spent spec 005 eradicating, applied to prose.
-if [ -f "$SIC" ]; then
-  SIC_BAD=0; SIC_N=0
-  for _spec in "$ROOT"/specs/*/spec.md; do
-    [ -f "$_spec" ] || continue
-    SIC_N=$((SIC_N + 1))
-    if ! bash "$SIC" "$ROOT" spec-template "$_spec" > /dev/null 2>&1; then
-      bad "spec does not conform to the spec template: ${_spec#$ROOT/}"
-      bash "$SIC" "$ROOT" spec-template "$_spec" 2>&1 | sed -n 's/^/        /p' | head -6
-      SIC_BAD=$((SIC_BAD + 1))
-    fi
-  done
-  if [ "$SIC_N" -eq 0 ]; then
-    bad "no spec.md found under specs/ — the conformance assertion examined nothing"
-  elif [ "$SIC_BAD" -eq 0 ]; then
-    ok "all $SIC_N spec(s) conform to the spec template (present, ordered, non-empty)"
+# The standing corpus, not a fixture: every spec, plan and task list is checked against its template.
+# Before this assertion existed, all six specs failed and nothing said so — a structure check shipped
+# with no gate behind it is the same defect this kit spent spec 005 eradicating, applied to prose.
+# Non-conformant *work records* of accepted features are excused through specs/.conformance-baseline.json,
+# which stores exact counts and fails when they change in either direction.
+CB="$ROOT/scripts/conformance-baseline.py"
+if [ -f "$CB" ]; then
+  if _cbout="$(python3 "$CB" check 2>&1)" && [ -n "$_cbout" ]; then
+    ok "$(printf '%s\n' "$_cbout" | tail -1)"
+  else
+    bad "conformance: an artifact does not match its template and is not a recorded exception"
+    printf '%s\n' "$_cbout" | grep -E '^  (FAIL|STALE)' | sed -n 's/^/        /p' | head -8
   fi
+
+  # Negative control: the same check must FAIL on a corpus with an unexcused non-conformant artifact.
+  # Without this, a bug that made every artifact pass would look identical to a clean corpus.
+  CBFD="$(mktemp -d)"
+  mkdir -p "$CBFD/specs/001-probe" "$CBFD/scripts"
+  cp -R "$ROOT/.specify" "$CBFD/.specify" 2>/dev/null || true
+  cp "$ROOT/scripts/check-section-integrity.sh" "$CBFD/scripts/"
+  cp "$ROOT/scripts/conformance-baseline.py" "$CBFD/scripts/"
+  printf '# Probe\n\n## Normative Status\n\nProbe.\n\n## Goals\n\n- a real goal\n' \
+    > "$CBFD/specs/001-probe/spec.md"
+  if CONFORMANCE_ROOT="$CBFD" python3 "$CBFD/scripts/conformance-baseline.py" check >/dev/null 2>&1; then
+    bad "conformance accepted an artifact missing 24 of 27 required sections"
+  else
+    ok "conformance rejects an unexcused artifact that is missing required sections"
+  fi
+  rm -rf "$CBFD"
 fi
 
 hdr "1h. CiteKit MCP registration is optional, and skips cleanly"

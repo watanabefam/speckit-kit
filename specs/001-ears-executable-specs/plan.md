@@ -257,6 +257,43 @@ Not performance-sensitive. Reliability is idempotency + composition: re-run reac
 - SC-001 spot check: 5 consecutive requirements convertible to acceptance checks without author clarification.
 - Manual: `specify preset resolve` append order inspection; README/BUILD_PLAN/mirror-set review. See `quickstart.md`.
 
+## Correctness Properties
+
+Properties here are about the *template's* output, because that is what this feature ships; they are
+what the property-test tasks in `tasks.md` are written against.
+
+### Rules
+
+- One property per testable requirement, stated as `for any <domain>, <property that must hold>`.
+- A requirement that cannot carry a decidable property gets an explicit opt-out **and a reason** —
+  never a property invented to fill the table.
+- The property is observed failing before it is trusted (the tasks template requires the
+demonstration).
+
+### Framework decision
+
+`adopt` — but only where the project already has a framework. This kit's own suite is bash plus a
+stdlib-only Python harness, so its properties are example-based with generated inputs rather than
+Hypothesis: adding a Python dependency to assert a language-agnostic template would contradict
+FR-003's no-hardcoded-framework rule. The template tells downstream projects to name *their*
+framework; the kit does not name one for them.
+
+### Traceability
+
+| Property | Requirement | Where it is checked |
+| --- | --- | --- |
+| P-001 | FR-001 (EARS guidance in the spec template) | gate: composed `spec-template` contains all five patterns |
+| P-002 | FR-006 (Correctness Properties section) | gate: composed `plan-template` contains the section and its opt-out column |
+| P-003 | FR-007 (one task per property) | gate: composed `tasks-template` carries the rule and the worked example |
+| P-004 | FR-009 (no hardcoded framework) | gate: grep over kit-owned template text, with an allowlisted negative example |
+| P-005 | FR-010 (works skill-unloaded) | SC-004 scratch-repo trial |
+
+### Independence
+
+Each property is checkable from the composed template text alone — no property needs another
+property's output, no property needs a running agent, and the trial (P-005) is the only one that needs
+a generated artifact rather than a grep. A failure therefore points at one template, not at a chain.
+
 ## Alternatives Considered
 
 | Option | Advantages | Disadvantages | Decision |

@@ -23,6 +23,24 @@ container, not a stub.
   section that never applies is marked OPTIONAL in the template rather than left to every author.
   Rationale and sources: `decisions/0004`.
 
+### Added — conformance covers plans and task lists, with a recorded baseline
+
+`scripts/conformance-baseline.py` checks every `specs/*/spec.md`, `specs/*/plan.md` and `specs/*/tasks.md`
+against its template, and the gate fails on any artifact that does not conform unless it is a recorded
+exception in `specs/.conformance-baseline.json`. Entries store **exact counts**: an artifact that gets
+worse fails, and one that conforms again also fails until its entry is removed — the same anti-rot rule
+ESLint's unused suppressions and RuboCop's `--report-unused-todo-entries` apply.
+
+- Five work records of accepted, implemented features are excused with reasons (002's plan and tasks,
+  004's plan and tasks, 003's tasks): they were written against older layouts, and reformatting an
+  accepted record damages blame without changing meaning (`decisions/0005`).
+- 001's plan gained the `## Correctness Properties` section its own feature mandates, and 001's tasks
+  the property-task sections. Those were real gaps, not formatting.
+- The checker no longer demands the literal `## Phase N: Polish & Cross-Cutting Concerns`; `N` is a
+  placeholder for the author's own phase name.
+- `check-section-integrity.sh` gained `--json`, and the gate gained a negative control that asserts the
+  corpus check fails on an unexcused non-conformant artifact.
+
 ### Changed — all six specs conform
 
 `specs/001`–`006` were migrated to the current spec template: 27/27 headings each, present, ordered,

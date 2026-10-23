@@ -37,11 +37,18 @@
 set -uo pipefail
 
 PROJECT="${1:-}"; TEMPLATE="${2:-}"; ARTIFACT="${3:-}"
+MODE="${4:-human}"
 if [ -z "$PROJECT" ] || [ -z "$TEMPLATE" ] || [ -z "$ARTIFACT" ]; then
-  echo "usage: $0 <project-root> <template-name> <artifact-file>" >&2
+  echo "usage: $0 <project-root> <template-name> <artifact-file> [--json]" >&2
   echo "   e.g. $0 . spec-template specs/007-thing/spec.md" >&2
+  echo "   --json prints {ok, required, missing, disordered, stubs} and no human lines" >&2
   exit 2
 fi
+if [ "$MODE" != "human" ] && [ "$MODE" != "--json" ]; then
+  echo "$0: unknown mode '$MODE' (expected --json)" >&2
+  exit 2
+fi
+say() { [ "$MODE" = "--json" ] || printf '%s\n' "$1"; }
 
 RESOLVER="$PROJECT/.specify/scripts/bash/resolve-template.sh"
 [ -f "$RESOLVER" ] || { echo "no resolve-template.sh under $PROJECT/.specify/scripts/bash" >&2; exit 2; }
@@ -87,8 +94,15 @@ strip_fences() {
 }
 
 headings() {
-  strip_fences "$1" | grep -E '^#{1,4}[[:space:]]' | sed -e '/\[/d' -e '/(OPTIONAL/d' | normalize
+  strip_fences "$1" \
+    | grep -E '^#{1,4}[[:space:]]' \
+    | sed -e '/\[/d' -e '/(OPTIONAL/d' -e '/^## Phase N[: ]/d' \
+    | normalize
 }
+# `## Phase N: Polish & Cross-Cutting Concerns` is a PLACEHOLDER for "your own polish phase", like
+# `[FEATURE NAME]`. Requiring the literal `N` made every real tasks.md fail on a heading that was
+# never meant to be copied verbatim — the check demanding the placeholder is the same class of defect
+# as counting a shell comment as a heading.
 
 # Headings whose section renders nothing before the next heading of the same or a higher level.
 # A heading followed by a DEEPER heading is a container, not a stub — see the STUBS note above.
@@ -145,6 +159,7 @@ if [ "$total" -eq 0 ]; then
   echo "  ERROR    template '$TEMPLATE' resolved with no required headings — refusing to report success" >&2
   rm -rf "$TMPD"; exit 2
 fi
+: > "$TMPD/missing_list"; : > "$TMPD/order_list"
 
 missing=0; disordered=0; cursor=0; index=0
 while IFS= read -r want; do
@@ -166,7 +181,8 @@ while IFS= read -r want; do
   if [ "$at" -ne 0 ]; then
     cursor=$at
   elif [ "$appears" -eq 0 ]; then
-    printf '  MISSING  %s\n' "$want"
+    say "  MISSING  $want"
+    printf '%s\n' "$want" >> "$TMPD/missing_list"
     missing=$((missing + 1))
   else
     # Some sections are INSTRUCTED to move. The commands require `Document Status` directly after
@@ -181,7 +197,8 @@ while IFS= read -r want; do
       "## Document Status"|"## Normative Status"|"### Which document wins"|"## Requirements Syntax"|"## Problem / Opportunity")
         : ;;   # ordering waived by instruction; presence already verified above
       *)
-        printf '  ORDER    %s  (found before an earlier-required section)\n' "$want"
+        say "  ORDER    $want  (found before an earlier-required section)"
+        printf '%s\n' "$want" >> "$TMPD/order_list"
         disordered=$((disordered + 1)) ;;
     esac
   fi
@@ -191,14 +208,44 @@ stubbed=0
 if [ -s "$TMPD/stubs-req" ]; then
   while IFS= read -r stub; do
     [ -n "$stub" ] || continue
-    printf '  STUB     %s  (a heading with nothing under it)\n' "$stub"
+    say "  STUB     $stub  (a heading with nothing under it)"
     stubbed=$((stubbed + 1))
   done < "$TMPD/stubs-req"
 fi
 
+status=1
+[ "$missing" -eq 0 ] && [ "$disordered" -eq 0 ] && [ "$stubbed" -eq 0 ] && status=0
+
+if [ "$MODE" = "--json" ]; then
+  # Machine-readable form, used by the gate and by scripts/conformance-baseline.py. A baseline that
+  # recorded prose would have to be re-parsed on every rule change; recording counts and the headed
+  # lists lets the gate fail on a stale entry instead of trusting it.
+  python3 - "$ARTIFACT" "$total" "$missing" "$disordered" "$stubbed" "$TMPD" "$status" <<'PY'
+import json, os, sys
+artifact, total, missing, disordered, stubbed, tmpd, status = sys.argv[1:8]
+def lines(name):
+    path = os.path.join(tmpd, name)
+    if not os.path.exists(path):
+        return []
+    with open(path) as fh:
+        return [l.rstrip("\n") for l in fh if l.strip()]
+print(json.dumps({
+    "artifact": artifact,
+    "ok": status == "0",
+    "required": int(total),
+    "missing": lines("missing_list"),
+    "disordered": lines("order_list"),
+    "stubs": lines("stubs-req"),
+    "counts": {"missing": int(missing), "disordered": int(disordered), "stubbed": int(stubbed)},
+}, sort_keys=True))
+PY
+  rm -rf "$TMPD"
+  exit "$status"
+fi
+
 rm -rf "$TMPD"
 
-if [ "$missing" -eq 0 ] && [ "$disordered" -eq 0 ] && [ "$stubbed" -eq 0 ]; then
+if [ "$status" -eq 0 ]; then
   printf '  ok       %s: all %s required sections present, in template order, none empty\n' "$ARTIFACT" "$total"
   exit 0
 fi
