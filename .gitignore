@@ -10,3 +10,6 @@
 # Python bytecode from the eval tooling
 __pycache__/
 *.pyc
+
+# Scratch clones for the research re-verification (never committed)
+.scratch/

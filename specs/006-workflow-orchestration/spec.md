@@ -14,7 +14,9 @@
 **Normative sections:** User Scenarios & Testing, Requirements, Success Criteria.
 
 **Revised**: 2026-10-22 after `docs/research/spec-vs-research-check-2026-10-22.md` (findings H-04, H-05,
-M-09…M-12, L-06…L-09).
+M-09…M-12, L-06…L-09). **Also revised**: 2026-10-23, after the audit was re-verified at source — **FR-033**
+mandated the raw `git worktree add` that both peers now identify as the mistake, and was corrected; see
+`docs/research/incorporation-decisions-2026-10.md`, "Re-verification at source level".
 
 ## Normative Status
 
@@ -298,10 +300,12 @@ both are surfaced with the work they belong to.
 Source: `docs/research/spec-vs-research-check-2026-10-22.md` and the audit's own adoption table. Four of these
 are mechanics the audit assigned here and the first draft dropped; the rest close places where the spec
 promised a property without a mechanism. They sharpen existing stories rather than adding an eighth.
+FR-033 was revised again on 2026-10-23: the re-verification found that the raw `git worktree add` this block
+originally required is the specific thing its source calls the "#1 mistake".
 
 *Claims and boundaries (US1)*
 
-- **FR-033**: Each worker MUST work in its own checkout (`git worktree` per task), so two in-flight tasks never share a working tree.
+- **FR-033**: Each worker MUST work in its own checkout, created by the host's own worktree facility where one exists and by `git worktree` only where none does; the checkout MUST live inside the repository's designated worktree directory, never beside the project root, so two in-flight tasks never share a working tree. If checkout creation is refused by the environment, work MUST fall back to sequential in-place execution rather than to a shared tree.
 - **FR-034**: A task declaring an empty boundary MUST be rejected when the plan is read, not at completion.
 - **FR-035**: Starting a task MUST record the commit it began from, and completing it MUST record the commit range it produced.
 - **FR-036**: Tasks with no dependency between them MUST be startable as a wave, so a plan's independent work is not serialised.
@@ -323,7 +327,7 @@ promised a property without a mechanism. They sharpen existing stories rather th
 
 - **Claim**: a task, the worker holding it, when it was taken, its lease age, and every takeover recorded against it.
 - **Wave**: a set of tasks with no dependency between them, startable together.
-- **Checkout**: one worker's working tree, created as a `git worktree` so no two workers share one.
+- **Checkout**: one worker's working tree, created by the host's worktree facility (or `git worktree` where there is none) inside the repository, so no two workers share one.
 - **Boundary**: the set of files or areas a task is permitted to touch.
 - **Handoff**: why work stopped, what was uncommitted at that moment, and what the next task is.
 - **Amendment**: additions, changes and removals against a previously settled requirement, with a date.

@@ -7,6 +7,32 @@ The preset version lives in `preset/preset.yml` and is what `specify preset info
 
 ## [Unreleased]
 
+### Changed — the peer sweep is re-verified at source, and one requirement was wrong
+
+Every repo in `docs/research/incorporation-decisions-2026-10.md` was cloned and each adopted or rejected
+mechanic was read in its own source file, at a recorded commit. The sweep had been graded mostly on
+READMEs, which is the failure mode that document exists to criticise.
+
+- **Eight claims did not survive.** Two mattered. superpowers' review is one task review with **two
+  required verdicts**, not two sequential stages. And its worktree skill makes the **host's native tool**
+  the first rule, calling a raw `git worktree add` "the #1 mistake" — which is what `006` FR-033 had
+  mandated. FR-033 now requires a checkout created by the host's facility where one exists, placed inside
+  the repository, with a sequential in-place fallback; a second peer's HEAD commit the same day says the
+  same thing ("never beside the project").
+- **One strength was mis-attributed.** SpecWeave redacts handoff secrets by regex and pushes anyway, its
+  own module disclaiming the guarantee. `006` FR-037/SC-010 are stricter than upstream, not inherited —
+  recorded as ours.
+- **SpecWeave's `review` exit 3** also fires when no verdict was returned, which is why a finding must
+  record how it was established rather than lean on an absent verdict.
+- **A gap in `005` is recorded, not patched**: diff_cover's `--expand-coverage-report` exists because a
+  coverage report can omit a file entirely, and an omitted line is not an uncovered one. FR-033/FR-034 do
+  not yet say so; the proposed clause is in the research record because `005` is Accepted.
+- Minor factual corrections: SpecWeave's auto-handoff threshold is a percentage of a **usage window** (with
+  `suggest`/`enforce`/`checkpoint` modes); OpenSpec has no `/opsx:archive` (it is the
+  `openspec-archive-change` skill, and it also asserts no delta headings remain after syncing); agent-os's
+  `config.yml` is 10 lines, not 8; task-master registers 43 tools, not "~40".
+- `.scratch/` is gitignored, so the clones used for this pass are never committed.
+
 ### Added — section conformance is enforced, and emptiness is a failure
 
 `scripts/check-section-integrity.sh` now reports a required heading with nothing rendered under it as

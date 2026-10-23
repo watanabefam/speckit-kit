@@ -123,3 +123,20 @@ That amendment has run (`decisions/0004`). All six specs now pass — 27/27 head
 non-empty — and `scripts/self-gate.sh` asserts it over every `specs/*/spec.md`, so the next drift is a
 gate failure rather than a silent omission. The checker also gained stub detection and fence awareness;
 the second was a defect that had previously been worked around by editing a template.
+
+## Coverage gap found at source, recorded rather than patched (2026-10-23)
+
+Re-verifying the peer sweep at source (`docs/research/incorporation-decisions-2026-10.md`) exposed a gap in
+this spec's changed-line requirement. FR-033/FR-034 say only a full-suite profile may be read as "no test
+executes this line", which is necessary but not sufficient: diff_cover ships `--expand-coverage-report`
+precisely because a coverage report can **omit a file entirely**, and an omitted line is neither covered nor
+uncovered. A full-suite run with a partial report can still omit lines, and nothing in this spec forbids
+reading that silence as "no test reaches it".
+
+005 is Accepted, so the clause was not edited unilaterally. Proposed amendment, awaiting the owner:
+
+> A line the coverage report does not mention MUST be reported as unknown, never counted as covered or
+> uncovered.
+
+Until that lands, FR-034's existing prohibition is the only guard, and it guards the profile rather than
+the report.
