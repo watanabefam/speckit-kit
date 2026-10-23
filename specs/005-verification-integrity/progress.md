@@ -112,12 +112,14 @@ first version counted any `SC-` mention in this file as evidence — including a
 criterion was *not* measured. Evidence is now an explicit `[SC-xxx]` bracket on the line that
 names the command or record behind it.
 
-## Conformance gap found, not fixed
+## Conformance gap found here, fixed by the amendment
 
-`scripts/check-section-integrity.sh . spec-template specs/005-verification-integrity/spec.md`
-exits 1: 17 required sections are missing and `## Problem / Opportunity` sits before an
-earlier-required heading. The spec predates the current template revision (it has no
-`## Normative Status`, `## Requirements Syntax`, `## Carried Forward`, `## Goals`, `## Non-Goals`).
-`tasks.md` (28/28) and `plan.md` (44/44) both pass. The spec is not restructured here because the
-plan records it as approved content — changing it needs an amendment, not an edit — so the gap is
-reported rather than patched.
+When 005 closed, `scripts/check-section-integrity.sh . spec-template specs/005-verification-integrity/spec.md`
+exited 1: 17 required sections were missing and `## Problem / Opportunity` sat before an earlier-required
+heading, because the spec predates the current template revision. It was reported rather than patched,
+and `decisions/0003` deferred it to a cross-spec amendment.
+
+That amendment has run (`decisions/0004`). All six specs now pass — 27/27 headings, present, ordered,
+non-empty — and `scripts/self-gate.sh` asserts it over every `specs/*/spec.md`, so the next drift is a
+gate failure rather than a silent omission. The checker also gained stub detection and fence awareness;
+the second was a defect that had previously been worked around by editing a template.

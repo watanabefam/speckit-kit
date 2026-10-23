@@ -1418,6 +1418,25 @@ else
       bad "rejected a section written without the template's guidance note (false positive)"
     fi
 
+    # A required heading with nothing under it is the shape a section takes when it exists only to
+    # satisfy this check. If that is not caught, adding headings becomes a way to pass — the exact
+    # ritual this check was built to prevent. Negative control first: the stub MUST be reported.
+    awk '{ print } /^## Goals$/ { print ""; print "## Non-Goals"; print "" }' "$SICD/ok.md" > "$SICD/stub.md"
+    if bash "$SIC" "$ROOT" spec-template "$SICD/stub.md" >/dev/null 2>&1; then
+      bad "accepted a required section with nothing under it — heading-only conformance passes"
+    else
+      ok "catches a required section with nothing under it"
+    fi
+    # The inverse: a fenced code block IS content, and a '#' inside a fence is a comment, not a
+    # heading. Both were false positives during this check's own repair.
+    awk '{ print } /^## Goals$/ { print ""; print "```bash"; print "# a shell comment, not a heading"; print "true"; print "```"; print "" }' \
+      "$SICD/ok.md" > "$SICD/fenced.md"
+    if bash "$SIC" "$ROOT" spec-template "$SICD/fenced.md" >/dev/null 2>&1; then
+      ok "treats a code block as content and its '#' comments as comments"
+    else
+      bad "reported a fenced code block as an empty section, or its comment as a heading"
+    fi
+
     # Two further pinning tests, both against the TASKS template — which the fixture above never
     # touched, and which carries '### Worked example' twice. A repeated heading used to be read as
     # reordered because the search restarted from the top of the artifact each time.
@@ -1446,6 +1465,27 @@ else
     sed 's/^/        /' "$SICD/err" 2>/dev/null | tail -10
   fi
   rm -rf "$SICD"
+fi
+
+# The standing corpus, not a fixture: every spec in this repository conforms to the spec template.
+# Before this assertion existed, all six failed and nothing said so — a structure check shipped with
+# no gate behind it is the same defect this kit spent spec 005 eradicating, applied to prose.
+if [ -f "$SIC" ]; then
+  SIC_BAD=0; SIC_N=0
+  for _spec in "$ROOT"/specs/*/spec.md; do
+    [ -f "$_spec" ] || continue
+    SIC_N=$((SIC_N + 1))
+    if ! bash "$SIC" "$ROOT" spec-template "$_spec" > /dev/null 2>&1; then
+      bad "spec does not conform to the spec template: ${_spec#$ROOT/}"
+      bash "$SIC" "$ROOT" spec-template "$_spec" 2>&1 | sed -n 's/^/        /p' | head -6
+      SIC_BAD=$((SIC_BAD + 1))
+    fi
+  done
+  if [ "$SIC_N" -eq 0 ]; then
+    bad "no spec.md found under specs/ — the conformance assertion examined nothing"
+  elif [ "$SIC_BAD" -eq 0 ]; then
+    ok "all $SIC_N spec(s) conform to the spec template (present, ordered, non-empty)"
+  fi
 fi
 
 hdr "1h. CiteKit MCP registration is optional, and skips cleanly"

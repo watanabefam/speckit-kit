@@ -134,10 +134,19 @@ Liskov & Guttag invariants, and Meyer's design-by-contract (`require` / `ensure`
 Not every requirement maps cleanly to a property. Map what you can, and **opt out explicitly** for
 the rest — a vacuous property is worse than a recorded opt-out.
 
-| Property ID | Requirement | Scope | `for any …` statement | Check method | Non-mapped reason |
-| --- | --- | --- | --- | --- | --- |
-| P-001 | FR-001 | operation / type / system | `for any <domain>, <property that must hold>` | property-test | — |
-| — | FR-002 | — | — | — | qualitative / no decidable oracle |
+| Property ID | Requirement | Spec rule | Scope | `for any …` statement | Falsification | Check method | Non-mapped reason |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| P-001 | FR-001 | the spec sentence this encodes | operation / type / system | `for any <domain>, <property that must hold>` | a command or input that must make it fail | property-test | — |
+| — | FR-002 | — | — | — | — | — | qualitative / no decidable oracle |
+
+**Spec rule** — the sentence in `spec.md` the property encodes, quoted or cited. A property that
+cannot name its rule is a generic test with a generator attached.
+
+**Falsification** — a command (or a recorded input) that makes the property fail *before* it is
+trusted. A property that passes but cannot fail is not evidence, and the demonstration is executed,
+not described: `bin/speckit-verify` runs `falsify` first and refuses to count the check as evidence
+when it passes. Both fields become `spec_rule` and `falsify` on the check in `.specify/verify.json`
+for `kind: property`.
 
 **Scope** — what the property ranges over. `operation` (holds for one call — a Hoare triple),
 `type` (holds for every instance — a class invariant), or `system` (holds across components or over

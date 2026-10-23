@@ -16,6 +16,19 @@
 **Revised**: 2026-10-22 after `docs/research/spec-vs-research-check-2026-10-22.md` (findings H-04, H-05,
 M-09…M-12, L-06…L-09).
 
+## Normative Status
+
+**Normative:** User Scenarios & Testing, Requirements, Success Criteria. Everything else in this
+document is informative — including `## Decisions this spec makes explicit`, which records choices
+rather than imposing behaviour.
+
+### Which document wins
+
+This spec is authoritative for behaviour. `docs/research/incorporation-decisions-2026-10.md` is
+informative: it is the audit that produced every item below, and where the two disagree, this spec
+prevails. `specs/005-verification-integrity/spec.md` is authoritative for what "evidence that a check
+ran" means; 006 borrows that definition and does not restate it.
+
 **Relationship to 005:** `005-verification-integrity` answers *"does a green result mean anything?"* This
 spec answers *"can two unattended workers run at once without destroying each other's work, and can the
 work survive being stopped?*" 005 is useful alone, and so is 006 — with **one** exception, stated here
@@ -356,3 +369,114 @@ promised a property without a mechanism. They sharpen existing stories rather th
 - Session limits are discoverable where the host exposes them and unavailable elsewhere; where unavailable, the automatic stop is simply absent, never wrong.
 - `specs/005-verification-integrity/` is expected to land first in practice. This spec depends on it only for FR-007's *definition* of evidence; the fallback in FR-007 keeps 006 implementable alone.
 - Cross-checkout claims require a remote. Where the repository has no remote, claim acquisition is atomic only within one filesystem, and that limitation is reported rather than hidden.
+
+## Requirements Syntax
+
+**Not applicable — this spec's requirements are not in EARS.** FR-001…FR-0xx use `MUST` in the
+RFC 2119 sense, like the specs written before EARS arrived. Rewriting approved requirement text into
+EARS is an amendment with its own review; the checkable part of this feature lives in the claim
+mechanism (git's conditional ref update) and in FR-007's borrowed definition of evidence, not in the
+wording of a clause.
+
+## Carried Forward
+
+What this artifact inherits from the work before it.
+
+### Confirmed Decisions
+
+- **A claim is a repository object** — atomicity comes from git's conditional ref update, so there is
+  no daemon and no token; across machines the claim rides the remote, and with no remote the tool says
+  claims are advisory rather than pretending otherwise.
+- **Test-first is a mode, not a default**, matching superpowers' flag.
+- **Findings are advisory, gates are not**: review informs, the executable gate decides.
+- **The spec governs intended behaviour; the code governs structure.** Where they disagree the spec is
+  repaired first and its dependents re-checked.
+- **A reviewer's output is evidence only after its precision is measured.**
+
+### Constraints
+
+- Agent-agnostic: every mechanic must work in a host with no subagent support, degrading to sequential
+  rather than failing.
+- No new runtime dependency; delivery is the existing installer and command surface.
+- Session limits are host-dependent: where unavailable the automatic stop is absent, never wrong.
+
+### Assumptions
+
+Carried from `## Assumptions` above, all five. The load-bearing one is the pair "two workers may be one
+agent and one human" and "claims are advisory without a remote" — together they forbid any design that
+needs a coordinating process.
+
+### Risks
+
+- **Two workers collide anyway**, through a claim that is advisory on a machine with no remote.
+  Mitigated by saying so in the report rather than by inventing a lock service.
+- **A reviewer that over-rejects**, the documented failure mode of LLM reviewers against stated
+  requirements. Mitigated by requiring measured precision before its output counts as evidence.
+- **Evidence that a check ran** becomes a second definition if 005 has not landed. Mitigated by FR-007's
+  explicit fallback, which is a weaker but compatible definition.
+
+### Open Questions
+
+- Whether claims should be enforced (a hook) rather than advisory on a single checkout is parked:
+  row 1 of the parking lot. Enforcing needs a host hook, and the kit's hooks are deny-lists, not
+  coordination points.
+
+## Goals
+
+- Two unattended workers cannot silently destroy each other's work.
+- Work survives being stopped: a claim, its task state and its notes outlive a session.
+- Test-first is available as a mechanic when asked for, not imposed.
+- A changed requirement leaves a trace, and findings arrive where the work is.
+
+## Non-Goals
+
+Refused outright, with the audit's reasons in `## Out of Scope`:
+
+- Standards discovery and injection (agent-os), task-graph tooling (task-master), persona ceremony
+  (BMAD), and a second spec layout (marker collision).
+- A coordinating daemon or a claim token — the claim is a git ref, deliberately.
+- A model-as-judge verdict; a reviewer files findings, the gate decides.
+
+## Dependencies and External Contracts
+
+- **git** — the claim is a conditional ref update; without a remote, cross-checkout claims are advisory.
+- **`specs/005-verification-integrity/`** — supplies the definition of "evidence that a check ran"
+  that FR-007 uses; FR-007 carries a fallback for when 005 has not landed.
+- **Host capabilities** — subagent support, session limits, and a notification channel where findings
+  are delivered. Each degrades to a documented absence.
+
+## MVP Scope
+
+The claim mechanism with its honest single-checkout degradation, resumable task state, the test-first
+mode, a review that files findings into a file, requirement-change traces, and notes that survive the
+session. Notification is last (P3) and may ship as a documented manual step.
+
+## Future Work (parking lot)
+
+| # | Idea | Noticed during | Why deferred | Revisit when |
+| --- | --- | --- | --- | --- |
+| 1 | Enforce claims with a host hook instead of advisory checks | Specifying | Hooks here are deny-lists, not coordination points; a wrong lock blocks all work | When a host exposes a pre-write hook with claim semantics |
+| 2 | Measure a reviewer's precision automatically as part of the gate | Specifying | Needs a labelled corpus of findings, which does not exist yet | After one feature has been reviewed twice with recorded outcomes |
+| 3 | Cross-machine claim reconciliation beyond the remote | Specifying | The remote already provides the ordering; a second mechanism would disagree with it | If claim conflicts are observed in practice |
+
+### Parking lot vs Non-Goals
+
+A **Non-Goal** is refused: a coordinating daemon, persona ceremony, a model-as-judge verdict. A
+**parked idea** is deferred with a trigger — row 1 is the tempting one, and it is deferred because the
+obvious implementation (a hook that blocks writes) is exactly how a workflow stops working on a machine
+whose hook support differs.
+
+## Validation Plan
+
+- **Automated** — two-worker claim trial: the same task claimed twice, once by each worker, with the
+  second refused and told why; a stop/resume trial that asserts task state and notes survive.
+- **Degradation trials** — no subagent support, no remote, no session limit available: each asserts a
+  documented absence rather than a failure.
+- **Review evidence** — a review whose precision is measured before its findings count as evidence.
+- **Evidence required for approval** — the above plus a requirement change that leaves a trace.
+
+## Requirement Traceability
+
+FR-001…FR-0xx map to tasks in `specs/006-workflow-orchestration/tasks.md` → *Requirement Coverage*;
+SC-001…SC-0xx map to the trials named in `## Validation Plan` above. FR-007's dependency on 005's
+definition is recorded in `## Document Status` and in `## Dependencies and External Contracts`.

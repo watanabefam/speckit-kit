@@ -48,6 +48,12 @@ The amendment, when opened, should:
   non-conformant indefinitely and every automated check still passes; that is a deliberate absence
   today, and it should be made deliberate in writing rather than by omission.
 
+## Discharged
+
+Executed by `decisions/0004`, which decides the rule this record left open and applies it to all six
+authorities, then makes the gate enforce it. Kept rather than deleted because the reasoning for *not*
+migrating one spec in isolation is what produced a rule instead of five more bespoke fixes.
+
 ## Consequences
 
 - The gap is recorded, reproducible, and still open. `005`'s `progress.md` names it under

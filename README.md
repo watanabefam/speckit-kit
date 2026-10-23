@@ -103,6 +103,13 @@ after, two consecutive runs produced specs with **all 5**, a plan with all 4, an
 file with all 3. `scripts/self-gate.sh` now asserts the prepends are present in the
 materialised commands and that the frontmatter survived.
 
+**The rule has a checker, and the checker has a gate.** `scripts/check-section-integrity.sh` compares
+an artifact's headings with the resolved template's: missing, reordered, or **empty** sections fail —
+an empty required heading is `STUB`, because adding headings to satisfy a structure check is how
+conformance becomes a ritual. A section that does not apply keeps its heading and says
+`Not applicable — <reason>`; the gate runs the check over every `specs/*/spec.md`, so drift is a
+failure rather than a discovery. Rationale and sources: `decisions/0004`.
+
 This is the same pattern the community's `toc-navigation` preset uses. `specassay` uses
 `append` alone and has the same latent flaw.
 

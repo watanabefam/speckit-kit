@@ -19,6 +19,8 @@
 **Normative sections:** User Scenarios & Testing, Requirements, Success Criteria. Everything else in
 this document is informative.
 
+### Which document wins
+
 This spec is authoritative for behaviour. `research.md` is informative: it carries the sources and
 rationale, and where the two disagree, this spec prevails (dated reference: 2026-10-17).
 

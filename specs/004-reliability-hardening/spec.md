@@ -13,6 +13,16 @@
 **Workflow:** full spec-driven · **Companion:** `research.md` (informative; points at the two research passes)
 **Normative sections:** User Scenarios & Testing, Requirements, Success Criteria.
 
+## Normative Status
+
+**Normative:** User Scenarios & Testing, Requirements, Success Criteria. Everything else in this
+document is informative.
+
+### Which document wins
+
+This spec is authoritative for behaviour. `research.md` is informative: it carries the two research
+passes and their sources, and where the two disagree, this spec prevails.
+
 ## Problem / Opportunity
 
 Two research passes (repo code analysis + CiteKit + primary-source review) found that the kit's
@@ -90,6 +100,20 @@ what actually happens.
 2. **Given** the installer refreshes an existing project, **When** it prints its status, **Then**
    the message does not claim a CLI/template refresh it did not perform.
 
+### Edge Cases
+
+- **A machine with no `jq`.** Every guard currently exits 0 without it, which is the defect this
+  feature closes; the edge case is the post-fix state: the guard must still allow a legitimate edit
+  and must say that the mechanical layer is degraded, rather than silently permitting everything.
+- **A machine with no `specify`.** The gate's `skip()` recursion triggers exactly here; after the fix
+  the section reports `INCOMPLETE` and `--strict` exits non-zero.
+- **A brownfield `opencode.json`** that already contains a `permission` object with the user's own
+  rules: the installer merges additively and never replaces the object.
+- **An `opencode.jsonc`** (comments): not auto-merged, because JSON-with-comments cannot be rewritten
+  safely by the installer; the installer says so instead of corrupting it.
+- **A ledger belonging to a different plan**: resume refuses rather than continuing against it.
+- **A second install** with prepends already present: idempotent, no duplicated markers.
+
 ## Requirements *(mandatory)*
 
 ### Functional Requirements
@@ -126,6 +150,8 @@ what actually happens.
 
 ## Success Criteria *(mandatory)*
 
+### Measurable Outcomes
+
 - **SC-001**: The gate exits non-zero on any skipped section under `--strict`, and no skip path
   recurses (verified by running the gate with `specify` absent).
 - **SC-002**: 7/7 guard-body probes produce the expected exit code (2 block, 2 allow, 2 malformed,
@@ -143,10 +169,108 @@ what actually happens.
 - `opencode.json` is JSON; `opencode.jsonc` may contain comments and is therefore not auto-merged.
 - The permission schema in use is the kit's existing `permission.bash` shape.
 
+## Requirements Syntax
+
+**Not applicable — this spec's requirements are not in EARS.** FR-001…FR-0xx use `MUST` in the
+RFC 2119 sense, matching the other specs written before EARS arrived. Rewriting approved requirement
+text into EARS is an amendment with its own review; the checkable shape EARS buys is carried here by
+the gate assertions, which fail on the behaviour rather than on the wording.
+
+## Carried Forward
+
+What this artifact inherits from the work before it.
+
+### Confirmed Decisions
+
+- The gate is three-state (`PASS` / `FAIL` / `INCOMPLETE`) and `--strict` turns every `INCOMPLETE`
+  into a non-zero exit; a skipped section is never a pass.
+- Guard bodies exit 2 to block and 0 to allow, and a malformed event is blocked rather than allowed.
+- The permission block is merged additively into an existing `opencode.json`; `opencode.jsonc` is
+  reported, not rewritten.
+- `speckit-check` verifies artifacts rather than reporting "current" from optimism.
+
+### Constraints
+
+- `python3` is already a hard dependency, so the installer and `speckit-resume` may use it; `jq` is
+  not, so a guard that needs it must handle its absence.
+- No workflow/extension migration, no worktree isolation, no parallel dispatch — recorded as
+  `## Non-Goals` above.
+- The mutation and differential evidence layers are out of scope here (they became spec 005).
+
+### Assumptions
+
+Carried from `## Assumptions` above: `python3` present, `opencode.json` is JSON, and the permission
+schema in use is the kit's existing `permission.bash` shape.
+
+### Risks
+
+- **A guard that blocks legitimate work.** Mitigated by 7/7 probe coverage (SC-002) including the
+  allow cases, not only the block cases.
+- **An installer that corrupts a brownfield config.** Mitigated by additivity plus the parse check in
+  SC-003, and by refusing `opencode.jsonc`.
+- **A gate that reports `INCOMPLETE` and still exits 0.** This was the original defect; SC-001 asserts
+  the exit code, not the printed word.
+
+### Open Questions
+
+None open. The one that could have reopened the feature — whether to add the mutation and differential
+layers here — was answered by keeping them out and specifying them separately (005), which is recorded
+in `## Non-Goals`.
+
+## Goals
+
+- A skipped check cannot read as a pass, and the gate's exit code says what its output says.
+- The guards cannot silently disappear: a missing `jq` degrades loudly, and the mechanical layer is
+  not inert by accident.
+- Drift, resume and install are computed from evidence rather than assumed.
+- Re-install is truthful and idempotent.
+
 ## Non-Goals
 
 - Migrating to Spec Kit workflows/extensions, worktree isolation, or parallel task dispatch.
 - Replacing the mutation/differential evidence layers (research recommends them; they are a later
-  feature).
+  feature — 005).
 - Repeating eval runs to report `pass^k` — the current harness is single-run by design; adding
-  repeats changes its cost model and is a separate change.
+  repeats changes its cost model and is a separate change (delivered in 005).
+
+## Dependencies and External Contracts
+
+- **`opencode.json` / `opencode.yaml` hooks** — the guard contract is exit 2 = block.
+- **`specify`** — present or absent; absence must produce `INCOMPLETE`, not recursion.
+- **`jq`** — optional, and its absence must be visible.
+- **`python3`** — required, used by the installer, `speckit-resume` and `speckit-check`.
+
+## MVP Scope
+
+The gate's three-state verdict with `--strict`, the seven guard-body probes, additive permission merge
+with a parse check, `speckit-check`'s artifact re-verification, and `speckit-resume`'s ledger identity
+check. Nothing else from the research passes is in scope.
+
+## Future Work (parking lot)
+
+| # | Idea | Noticed during | Why deferred | Revisit when |
+| --- | --- | --- | --- | --- |
+| 1 | Mutation and differential evidence layers | Research | Wall-clock cost and a different subject; specified as 005 | Done — 005 implements the bounded mutation stage |
+| 2 | Repeating eval runs to report `pass^k` | Research | Changes the harness cost model | Done — `evals/run-passk.py` in 005 |
+| 3 | A `speckit-check` mode that also verifies the manifest and ledger | Implementing 005 | Needed the engine first | Done — `speckit-check` reports ledger drift |
+
+### Parking lot vs Non-Goals
+
+A **Non-Goal** is refused here: workflow migration, worktree isolation, parallel dispatch. A **parked
+idea** is deferred and, in this case, all three were later picked up by 005 — which is the point of
+parking them: the row records *where the work went*, so a reader does not mistake deferral for
+rejection.
+
+## Validation Plan
+
+- **Automated** — `scripts/self-gate.sh` with `specify` absent asserts the skip path reports and does
+  not recurse; the guard-body probes assert 7/7 expected exit codes.
+- **Brownfield trial** — install over an existing `opencode.json` with user keys and parse the result
+  (SC-003); a second install asserts idempotence (SC-005).
+- **Removal trial** — delete each of the four artifacts and assert `speckit-check` exits 1 (SC-004).
+- **Evidence required for approval** — the above plus a mismatched-ledger resume exiting 2 (SC-006).
+
+## Requirement Traceability
+
+FR-001…FR-0xx map to tasks in `specs/004-reliability-hardening/tasks.md` → *Requirement Coverage*;
+SC-001…SC-006 map to the gate assertions named in `## Validation Plan` above.

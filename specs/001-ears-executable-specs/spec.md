@@ -8,6 +8,27 @@
 
 **Input**: User description: "Add EARS-notation requirements and property-based correctness properties to this kit, so specifications become executable. Requirements in specs/<feature>/spec.md should be written in EARS form: WHEN <trigger> THE SYSTEM SHALL <response>, plus the other EARS patterns (ubiquitous, state-driven, unwanted-behaviour, optional-feature). The plan should gain a Correctness Properties section mapping each testable requirement to a universally-quantified property that begins 'for any'. Tasks should require a property-based test per property, using the project's existing property-based testing framework where one exists. Must stay language-agnostic - do not hardcode Hypothesis, name the framework per project. Must NOT make properties mandatory for requirements that do not map cleanly to a property. Rationale: no preset in the spec-kit community has ported EARS or property-based testing (verified 0 of 41), and template-plus-verification features do not depend on a skill loading."
 
+## Document Status
+
+**Status changed:** 2026-10-04 (created Draft) · **Workflow:** full spec-driven · **Companion:** none
+(Draft; no researched companion document was written for this feature)
+
+**Lifecycle for the core `Status` field:** `Draft` → `Accepted` → `Deprecated` | `Superseded by <id>`.
+This feature has been implemented (the templates it adds are in use and asserted by the gate) but its
+`Status` field still reads `Draft`, because flipping it is the owner's act.
+
+## Normative Status
+
+**Normative:** User Scenarios & Testing, Requirements, Success Criteria. Everything else in this
+document is informative.
+
+### Which document wins
+
+This spec is authoritative. There is no companion document to disagree with it: the community-catalog
+claim it rests on (0 of 41 presets port EARS or property-based testing) was verified by the proposer
+and is not re-verified in this repository, which is stated as an assumption below rather than as
+fact.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Write requirements in EARS form (Priority: P1)
@@ -107,3 +128,128 @@ All functional requirements below are written in EARS form to exemplify the nota
 - Projects with no PBT framework are supported via an explicit plan-time decision (adopt a framework or fall back to example-based tests) rather than by mandating a dependency.
 - The `lean` preset bypasses template files entirely, so these addenda have no effect under `lean` — same documented constraint as existing addenda; users pick `lean` or this preset, not both.
 - Existing conventions hold: requirement IDs (`FR-001`), task IDs (`T00x`), `[P]` parallel markers, phase organisation, and ID-based traceability across spec → plan → tasks.
+
+## Requirements Syntax
+
+This feature **is** the requirements syntax, so the section is normative here rather than absent. A
+kit-generated functional requirement matches exactly one of five EARS patterns:
+
+| Pattern | Keyword | Shape | Use when |
+| --- | --- | --- | --- |
+| Ubiquitous | *(none)* | `THE <system> SHALL <response>` | the behaviour is always active |
+| Event-driven | `WHEN` | `WHEN <trigger> THE <system> SHALL <response>` | a response is required to an event |
+| State-driven | `WHILE` | `WHILE <state> THE <system> SHALL <response>` | the behaviour holds during a state |
+| Unwanted behaviour | `IF … THEN` | `IF <condition> THEN THE <system> SHALL <response>` | a failure or misuse must be handled |
+| Optional feature | `WHERE` | `WHERE <feature is enabled> THE <system> SHALL <response>` | the behaviour is conditional on a capability |
+
+`SHALL` is the only normative keyword (RFC 2119 sense). Clause order is fixed, following temporal
+logic: preconditions (`WHILE`, `WHERE`) precede triggers (`WHEN`), which precede responses. The
+patterns are carried in `preset/templates/spec-addendum.md`; this section states them so the
+requirement is traceable from the spec that introduces it.
+
+## Carried Forward
+
+What this artifact inherits from the work before it.
+
+### Confirmed Decisions
+
+- Delivery is `strategy: "append"` on `preset/templates/spec-addendum.md`, `plan-addendum.md` and
+  `tasks-addendum.md` in place — no new preset entries and no core-template forks.
+- Property-based testing is adopted where a framework exists, with an explicit recorded fallback to
+  example-based tests where it does not; the kit never mandating a dependency is the point.
+- The framework is named per project at plan time, never hardcoded in kit-owned template text.
+
+### Constraints
+
+- Language-agnostic: no framework name (Hypothesis and friends) may appear as a required choice.
+- The `lean` preset bypasses template files entirely, so these addenda have no effect under `lean`;
+  a user picks one or the other.
+- Existing ID conventions (`FR-001`, `T00x`, `[P]`) and phase organisation are preserved.
+
+### Assumptions
+
+Carried from `## Assumptions` above — six of them, of which the two that could invalidate the feature
+are that the append mechanism is the delivery vehicle, and that framework detection is a plan-time
+agent activity rather than something the kit can perform itself.
+
+### Risks
+
+- **A property that cannot fail is mistaken for evidence.** Mitigated by the tasks rule requiring the
+  property to be observed failing when the behaviour is removed.
+- **Non-mappable requirements get a forced property.** Mitigated by requiring an explicit opt-out
+  reason per requirement instead of a property for every requirement.
+- **Template text is composed without the skill loaded and silently loses a section.** Mitigated by
+  the SC-004 skill-unloaded trial and the gate's section assertions.
+
+### Open Questions
+
+- Whether EARS form itself should be machine-checked (a lint over requirement text) is parked, not
+  decided: row 1 of the parking lot. The kit asserts the *sections* exist; it does not parse clauses.
+
+## Problem / Opportunity
+
+No preset in the spec-kit community ported EARS or property-based testing (0 of 41, per the proposer's
+verification), so specifications generated by the kit are prose: a requirement can be satisfied by
+two different implementations and no one can tell. The opportunity is to make the template produce
+requirements a reviewer can convert to an acceptance check without asking the author, and properties
+that a test can be written against — with no dependency on a skill being loaded.
+
+## Goals
+
+- A kit-generated spec's functional requirements are each in a recognisable EARS pattern.
+- A kit-generated plan maps every testable requirement to a `for any …` property, and records why
+  each unmapped one was not mapped.
+- A kit-generated task list carries one property-based test task per property, naming the project's
+  own framework.
+- All of it works with the methodology skill unloaded.
+
+## Non-Goals
+
+- Mandating property-based testing, or any particular framework (Hypothesis, fast-check, proptest).
+- Forking or replacing core Spec Kit templates.
+- Porting the methodology to the `lean` preset, which bypasses templates by design.
+- A framework registry inside the kit: detection is a plan-time activity with a recorded decision.
+
+## Dependencies and External Contracts
+
+- **The preset append mechanism** (`preset/preset.yml`, `strategy: "append"`) — the only delivery path.
+- **The project's own PBT framework**, whatever it is; the template names none.
+- **`scripts/self-gate.sh`** — the surface that asserts the template text survived composition, so a
+  silent section loss is a gate failure rather than a surprise.
+
+## MVP Scope
+
+The three template addenda (EARS patterns with syntax and examples; the Correctness Properties
+section with its explicit opt-out; the one-task-per-property rule) plus the gate assertions that keep
+them composed. Framework detection stays a plan-time instruction.
+
+## Future Work (parking lot)
+
+| # | Idea | Noticed during | Why deferred | Revisit when |
+| --- | --- | --- | --- | --- |
+| 1 | Machine-check EARS clause form with a lint over requirement text | Specifying | The feature asserts sections, not grammar; a bad regex here rejects correct requirements | After a spec is authored with EARS and the failures are observed |
+| 2 | A per-language framework registry to replace plan-time detection | Specifying | A registry rots; detection reads the project instead | If detection proves unreliable in practice |
+| 3 | Property-test tasks that state the shrinking strategy | Implementing | Too specific to a framework; the task names the framework, it does not configure it | When a project asks for it |
+
+### Parking lot vs Non-Goals
+
+A **Non-Goal** is refused outright: mandating a framework, forking core templates, supporting `lean`.
+A **parked idea** is deferred pending a trigger, and row 1 is the important one — it is the obvious
+next step and it is *not* taken, because a clause linter that rejects a correct requirement is worse
+than no linter.
+
+## Validation Plan
+
+- **Automated** — `scripts/self-gate.sh` asserts the composed preset resolves all four template layers,
+  that the composed artifacts contain the new sections in append order, and that a re-run is
+  idempotent with no duplicated markers.
+- **Trial** — SC-004's skill-unloaded scratch-repo run: generate spec + plan + tasks with no skill
+  loaded and inspect for EARS requirements, a Correctness Properties section and property-test tasks.
+- **Both OSes** — the gate runs on Linux and macOS (bash 3.2), per SC-005.
+- **Evidence required for approval** — gate PASS on both, the trial's generated artifacts, and zero
+  hardcoded framework names in kit-owned template text.
+
+## Requirement Traceability
+
+FR-001…FR-010 map to tasks in `specs/001-ears-executable-specs/tasks.md` → *Requirement Coverage*,
+which also carries the P-001…P-0xx property table and the T034/T035 tasks that satisfy SC-004/SC-005.

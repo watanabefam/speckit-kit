@@ -15,6 +15,17 @@
 **Revised**: 2026-10-22 after `docs/research/spec-vs-research-check-2026-10-22.md` (findings C-01, H-01…H-03, M-01…M-08, L-01…L-05).
 **Relationship to 004:** `004-reliability-hardening` repaired the *kit's own* gate (its recursion, its skips, its ledger trust). This feature addresses a different subject: whether a verification report means anything — first at the kit's own `./scripts/verify`, then at any **downstream project's**. Where the two overlap, 004's three-state verdict (`scripts/self-gate.sh:1477-1490`) is the precedent to copy, not to change.
 
+## Normative Status
+
+**Normative:** User Scenarios & Testing, Requirements, Success Criteria. Everything else in this
+document is informative.
+
+### Which document wins
+
+This spec is authoritative for behaviour. `docs/research/verification-tooling-2026-10.md` is
+informative: it carries the citations, the measurements and the five validation rounds, and where the
+two disagree, this spec prevails. `research.md` in this directory is the short pointer to it.
+
 ## Problem / Opportunity
 
 Five rounds of validation (literature + upstream source + local measurement on this machine) converged on one finding: **the dominant failure mode of automated verification is not a missed bug — it is a report that says "pass" without having examined anything.**
@@ -323,3 +334,124 @@ Full citations, measurements, and the five validation rounds: `docs/research/ver
 - Downstream projects may use any language; the vacuity guard must be expressible per-runner rather than assuming one test framework.
 - The owner prefers a smaller true signal over a larger noisy one; the staged security ladder and the no-threshold mutation rule both encode this.
 - `scripts/verify` in this repository **was measured** on 2026-10-22 against FR-001/FR-002: `./scripts/verify` printed `ok` lines for every section — 263 at that measurement, 265 once the stopping-rule assertions landed the same day — with no failures, no skips, `SELF-GATE: PASS`, and exited 0 — with **no count of what was examined** printed anywhere. The verdict block (`scripts/self-gate.sh:1477-1491`) prints only `PASS`/`FAIL`, and its `INCOMPLETE` path leaves the exit code at 0 unless `--strict`; an earlier run the same day, with one section skipped, printed `SELF-GATE: INCOMPLETE` and still exited 0. So FR-001/FR-002 are **not** implemented at the kit's own gate; repairing that is the first implementation task, not an assumption of current correctness.
+
+## Requirements Syntax
+
+**Not applicable — this spec's requirements are not in EARS.** FR-001…FR-042 use `MUST` in the
+RFC 2119 sense, which is the syntax the rest of this repository's specs use. EARS (`SHALL`, one
+clause pattern per requirement) arrived with spec 001 for requirements that must be machine-checkable
+in form; rewriting approved requirement text into a different syntax is an amendment with its own
+review, not a template migration. What EARS buys — a checkable shape — is carried here by the
+manifest contract and the fixture corpus instead.
+
+## Carried Forward
+
+What this artifact inherits from the work before it.
+
+### Confirmed Decisions
+
+- The engine is `bin/speckit-verify`, reached through `./scripts/verify`; the manifest is
+  `.specify/verify.json` and is the only place a check is defined.
+- The ledger is append-only JSONL, one record per run, never rewritten or reordered (004's trust
+  argument, applied to evidence).
+- The verdict is three-state (`PASS` / `FAIL` / `INCOMPLETE`), copying `scripts/self-gate.sh`'s
+  precedent rather than inventing a fourth.
+- A check's negative control runs **before** the check; a control that passes makes the check vacuous.
+- Mutation is a candidate list with a non-blocking budget, never a threshold; the security ladder's
+  blocking tier requires a recorded baseline and a live confirmation.
+
+### Constraints
+
+- Python standard library only, and the shell wrappers must parse under bash 3.2 (macOS), which
+  rules out `flock`, GNU `timeout`, associative arrays and `mapfile`.
+- No network by default: the confirmation tier is opt-in, and an offline run reports `NOT-RUN` rather
+  than clean.
+- Selection is change-scoped through `git diff`; a project with no git repository gets a named refusal,
+  not a silent full run.
+
+### Assumptions
+
+Carried from `## Assumptions` above. The load-bearing ones are that optional scanners may be absent
+(absence is `NOT-RUN`, never a pass) and that `scripts/verify` at the kit's own gate was **not**
+already reporting an examined count — which the measurement in that section confirms.
+
+### Risks
+
+- **Selection omits a test that the change breaks.** Mitigated by the shared-file rule: a change to
+  `conftest.py`, a config file, a lockfile or the manifest selects every check and says `fallback:`.
+- **The tally becomes a ritual.** Mitigated by counting only explicit `[SC-xxx]` citations and by
+  issuing the tally as `n/m` with the gaps named — a tally with a silent gap is how this started.
+- **A scanner's output shape changes under us.** Mitigated by adapters that map unknown shapes to
+  `unknown`/`NOT-RUN` rather than to a pass.
+
+### Open Questions
+
+- **SC-004's wording** was one, and is now closed by measurement: the criterion names the suite-size
+  floor below which the ratio cannot hold (`docs/evidence/sc-004-timing-2026-10-22.md`).
+- **This spec's own template conformance** is open by decision: `decisions/0003` defers it to a
+  cross-spec amendment rather than migrating one artifact out of six.
+
+## Goals
+
+- A green result cannot be produced by a run that examined nothing.
+- The evidence trail survives a merge with no loss, duplication or reordering.
+- Verification cost tracks the size of the change, and the number that says so is measured.
+- Reliability is reported as two figures (single attempt, repeated attempts) rather than one.
+
+## Non-Goals
+
+- Replacing a real test suite, or judging the quality of a test that runs (only whether anything ran).
+- A mutation percentage as a gate, a model-as-judge verdict, or bundled third-party eval frameworks —
+  each excluded with its reason in `## Out of Scope`.
+- Blocking on pattern-only credential matches (FR-025, FR-035, FR-042).
+- Administering scanners: the staged ladder consumes their output; installation is the project's.
+
+## Dependencies and External Contracts
+
+- **git** — the change set, the diff base, and the untracked-file list. No git, no change-scoped mode.
+- **A test runner per check** — pytest, jest, cargo, go, make, schemathesis, or a bare command. The
+  adapter table is the contract: "collected nothing" must be distinguishable from "passed", and the
+  exit code alone does not do it (`go test` and `cargo test` both exit 0 with zero tests).
+- **Optional scanners** — semgrep, gitleaks, trufflehog. Absence is `NOT-RUN`/`INCOMPLETE`, never
+  clean; `trufflehog --only-verified` leaves the machine, so it is behind `security.confirm`.
+- **coverage.py JSON** — the input for changed-line provenance; the engine reads it and never writes it.
+
+## MVP Scope
+
+The engine, the manifest contract, the seven adapters, the vacuity guards (control, oracle, zero-test
+mapping), the three-state verdict, the append-only ledger with its verifier, the criteria tally, and
+change-scoped selection with the shared-file fallback. Mutation and the security ladder ship opt-in
+and are not required for the feature to be useful.
+
+## Future Work (parking lot)
+
+| # | Idea | Noticed during | Why deferred | Revisit when |
+| --- | --- | --- | --- | --- |
+| 1 | Cross-spec template conformance for 001–006 | Closing 005 | Six artifacts, one rule; recorded as `decisions/0003` | Before the next spec is specified |
+| 2 | Test-impact selection instead of file globs | Building selection | Needs per-test coverage; overkill while globs plus the shared-file rule are sound enough to ship | When a suite's per-check cost makes globs too coarse |
+| 3 | macOS bash 3.2 CI matrix for the new scripts | Writing the wrappers | The matrix exists; only the parse step is wired | When a script gains a bash-4 idiom that slips through |
+
+### Parking lot vs Non-Goals
+
+A **Non-Goal** is refused by this feature: a mutation threshold, a judge as gate, a scanner
+administered by the kit. A **parked idea** is deferred, not refused — row 1 is already decided as
+work (0003); rows 2 and 3 are conditional on a trigger. Nothing moves from the table into scope
+without its own spec.
+
+## Validation Plan
+
+- **Automated** — `python3 evals/fixtures/verify/harness.py --all`: 16 cases and 11 properties,
+  including the vacuity fixtures and their negative controls. `bash scripts/self-gate.sh` asserts the
+  engine, ledger and harness are present and that the fixture corpus covers the vacuity cases.
+- **Measurement** — `evals/measure-sc004.py`: the change-scoped cost claim, 7 interleaved pairs at
+  five suite sizes. Recorded in `docs/evidence/sc-004-timing-2026-10-22.md`.
+- **Negative controls** — every property was observed failing before it was observed passing; the
+  criteria tally was tightened after it counted a sentence saying a criterion was *not* measured.
+- **Evidence required for approval** — gate `PASS examined=N` with N > 0, the fixture corpus green,
+  the tally at `11/11`, and the SC-004 numbers above.
+
+## Requirement Traceability
+
+FR-001…FR-042 map to tasks in `specs/005-verification-integrity/tasks.md` → *Requirement Coverage*,
+one row per requirement, and P-001…P-012 to their property-test tasks in the table beside it. The
+success criteria map to evidence in `progress.md`, read by `bin/speckit-verify --criteria`.

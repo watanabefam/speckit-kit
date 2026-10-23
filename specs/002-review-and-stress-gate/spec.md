@@ -20,6 +20,16 @@
 Normative sections: User Scenarios & Testing, Requirements, Success Criteria. All other sections are
 informative.
 
+## Normative Status
+
+**Normative:** User Scenarios & Testing, Requirements, Success Criteria. Everything else in this
+document is informative.
+
+### Which document wins
+
+This spec is authoritative for behaviour. `research.md` is informative: it carries the sources and
+rationale, and where the two disagree, this spec prevails.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Independent review before completion (Priority: P1)
@@ -147,6 +157,47 @@ All functional requirements are in EARS form. Pattern labels in brackets are inf
 - The unratified `.specify/memory/constitution.md` is a pre-existing governance gap, not created or
   resolved by this feature; recorded here rather than silently ignored.
 
+## Requirements Syntax
+
+Not applicable — this feature's requirements are written in prose, not EARS. The EARS rules arrived
+with spec 001 for requirements that must be machine-checkable; converting 002's existing FR-001…FR-010
+to EARS would rewrite approved requirement text to satisfy a template, which is the failure mode this
+section exists to prevent. The shape this section asks for is present in 001.
+
+## Carried Forward
+
+What this artifact inherits from the work before it.
+
+### Confirmed Decisions
+
+- The review capability is delivered as a **prepend** to an existing command, not a forked core
+  command (`strategy: "prepend"`), so upstream Spec Kit can still be merged.
+- The stopping condition is severity (HIGH or above), not "zero findings".
+
+### Constraints
+
+- The rule is advisory in mechanism — a hook cannot enforce judgement — so it is asserted in the
+  gate by its presence and its bound, not by behaviour under pressure.
+- No new dependency: `scripts/self-gate.sh` is extended rather than a second harness added.
+
+### Assumptions
+
+Five assumptions are carried, all stated in `## Assumptions` above; the load-bearing one is that a
+fresh context is available, and the spec already says what happens when it is not (the rule degrades
+to stating that no independent review was possible, rather than to a self-review claiming
+independence).
+
+### Risks
+
+- **A rule that reads as satisfied by any reviewer sentence.** Mitigated by requiring a file:line
+  citation or a dismissal with a reason, and by the negative test in `## Validation Plan`.
+- **Review as a rubber stamp.** Mitigated by the severity stop and the ≤3 pass bound.
+
+### Open Questions
+
+None open. The two that were open — whether review could be hook-enforced, and whether the loop could
+be unbounded — were decided against, and both decisions are recorded in `## Non-Goals`.
+
 ## Problem / Opportunity
 
 The kit verifies *artifact consistency and declared-boundary integrity*; it does not review the
@@ -184,6 +235,14 @@ self-gate assertions and the `SKILL.md` "command carries" row updated.
 | 1 | Ratify `.specify/memory/constitution.md` | Specify | Not this feature; governance gap predates it | Before the next feature is specified |
 | 2 | An eval-based (RED-GREEN) test of whether the review rule changes agent behaviour under pressure | Research | Belongs at kit-release cadence, like `evals/`; expensive per-change | When a review-rule regression is suspected |
 | 3 | A distinct "different model" option documented for review, versus "different context" | Research | Depends on host capabilities; the rule says "ideally" | If hosts expose model selection to subagents |
+
+### Parking lot vs Non-Goals
+
+A **Non-Goal** is a thing this feature deliberately will not do (hook-enforced review, an unbounded
+loop). A **parked idea** is something noticed while building it that may deserve its own feature
+later — the three rows in the table above. Nothing moves from the parking lot into scope without a
+spec of its own; the constitution ratification in row 1 is the clearest case: it is a governance gap
+that predates this feature and is recorded, not resolved.
 
 ## Validation Plan
 

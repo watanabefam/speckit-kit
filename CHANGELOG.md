@@ -5,6 +5,30 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 The preset version lives in `preset/preset.yml` and is what `specify preset info` reports.
 
+## [Unreleased]
+
+### Added — section conformance is enforced, and emptiness is a failure
+
+`scripts/check-section-integrity.sh` now reports a required heading with nothing rendered under it as
+`STUB` and fails, and no longer reads `#` lines inside a fenced code block as headings (a defect that
+had previously been worked around by deleting two comment lines from the sample bash block copied into
+spec 005's tasks.md). A fenced block counts as content; a heading whose only content is subsections is a
+container, not a stub.
+
+- `scripts/self-gate.sh` runs the check over every `specs/*/spec.md` and fails on non-conformance, or if
+  it found no specs to examine at all. Before this, the check existed and nothing enforced it.
+- `## Problem / Opportunity` joins the headings whose ORDER is waived (presence still required): it is
+  appended last but reads better at the top.
+- The template addendum states the rule: keep the heading and write `Not applicable — <reason>`; a
+  section that never applies is marked OPTIONAL in the template rather than left to every author.
+  Rationale and sources: `decisions/0004`.
+
+### Changed — all six specs conform
+
+`specs/001`–`006` were migrated to the current spec template: 27/27 headings each, present, ordered,
+non-empty. `003` needed one heading, `001` nineteen. Content is derived from each spec's own text or is
+an explicit non-applicability with a reason; no new claims were added to fill a section.
+
 ## [1.16.0] — 2026-10-22
 
 ### Added — a green result must be earned (spec 005)

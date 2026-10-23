@@ -6,6 +6,28 @@
   problem framing and traceability that the core template does not carry.
 -->
 
+<!--
+  WHEN A SECTION DOES NOT APPLY
+
+  Keep the heading and say why: `Not applicable — <reason>`. Never delete it. The reason belongs
+  in the section because the whole point of a fixed outline is that a reader can tell "this did not
+  apply" from "this was forgotten" — a deleted heading is indistinguishable from an omission, and
+  the omission is the failure mode this outline exists to catch.
+
+  A bare `N/A` is accepted by the checker (it is content), and there is no reviewed tooling that
+  requires a justification after a non-applicability claim — so the obligation to write a reason is
+  a rule of this template, enforced by review, not by the machine.
+
+  An empty section is NOT accepted: `scripts/check-section-integrity.sh` fails an artifact whose
+  required heading has nothing under it, because filling the outline with empty headings would make
+  conformance a ritual. A heading whose only content is subsections is fine (container sections are
+  expected); a heading followed by a code block is fine (the block is content).
+
+  A section that never applies to any spec of this kind is a template defect, not an authoring
+  defect: mark it OPTIONAL in the template, which the checker honours, rather than asking every
+  author to write "not applicable".
+-->
+
 ## Document Status
 
 **Place this block immediately after the core metadata block** (the `Feature Branch` / `Created` /
@@ -148,6 +170,10 @@ handoff, not a retelling.
 
 [What problem or opportunity exists, for whom, and why does it matter now? If this is not a
 real problem, the feature should not be built.]
+
+*Placement:* this block is appended last, but problem-first reading is better than requirements-first,
+so `scripts/check-section-integrity.sh` waives ORDER for this heading (presence is still required).
+Put it directly after the document-status block if the document reads better that way.
 
 ## Goals
 
