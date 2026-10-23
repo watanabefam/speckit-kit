@@ -82,13 +82,12 @@ Task 76: complete (this file; `bin/speckit-resume specs/005-verification-integri
 
 ## Not claimed
 
-SC-004 is measured only above six checks: `docs/evidence/sc-004-timing-2026-10-22.md` records
+SC-004 is met from six checks up, not below: `docs/evidence/sc-004-timing-2026-10-22.md` records
 0.235 at six checks, 0.273 at five and 0.444 at three, on one 2-CPU machine over a synthetic
-suite. The criterion names no suite size, so the measured claim carries the floor in it and the
-criterion's wording is left for its owner — it is **not** stated as met unconditionally, and it
-is **not** a claim about this repository's own gate (the kit has no `.specify/verify.json`, so
-`./scripts/verify` still runs the legacy sequence). Everything else above names the command that
-proves it.
+suite. The criterion was amended to say so rather than being read as an unconditional 25%, so the
+measured claim carries its floor. It is **not** a claim about this repository's own gate (the kit
+has no `.specify/verify.json`, so `./scripts/verify` still runs the legacy sequence). Everything
+else above names the command that proves it.
 
 ## Analysis findings, repaired before implementing
 
