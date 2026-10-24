@@ -824,27 +824,53 @@ def security_stage(opts):
 
 # ---------------------------------------------------------------- coverage
 
-def changed_line_report(path, profile):
+def changed_line_report(path, profile, ignore=()):
     with open(path) as fh:
         try:
             report = json.load(fh)
         except ValueError as exc:
             die(2, "--coverage %s is not JSON: %s" % (path, exc))
-    executed = {}
+    executed, missing, excluded, declared = {}, {}, {}, {}
     for entry in report.get("files", []) or []:
-        executed[entry.get("file")] = set(entry.get("executed_lines", []) or [])
-    changed = changed_files(None) or []
-    reached, unexercised, unknown = [], [], []
+        name = entry.get("file")
+        if not name:
+            continue
+        executed[name] = set(entry.get("executed_lines") or [])
+        missing[name] = set(entry.get("missing_lines") or [])
+        excluded[name] = set(entry.get("excluded_lines") or [])
+        summary = entry.get("summary") or {}
+        if isinstance(summary.get("num_statements"), int):
+            declared[name] = summary["num_statements"]
+    # A changed file no check owns is already reported as unmatched; calling it unprofiled here
+    # would bury the few files that matter under every README and config the change touched.
+    skip = set(ignore)
+    changed = [name for name in (changed_files(None) or []) if name not in skip]
+    reached, unexercised, silent, excluded_lines = [], [], [], []
+    unprofiled, inconsistent = [], []
     for name in changed:
         if name not in executed:
-            unknown.append(name)
+            unprofiled.append(name)
             continue
-        lines = added_line_numbers(name)
-        for lineno in lines:
-            (reached if lineno in executed[name] else unexercised).append((name, lineno))
+        # A report whose summary disagrees with its own line lists is not evidence about any
+        # line in that file, so every changed line in it is unmeasured rather than in either bucket.
+        if name in declared and declared[name] != len(executed[name]) + len(missing[name]):
+            inconsistent.append(name)
+            silent.extend("%s:%d" % (name, n) for n in added_line_numbers(name))
+            continue
+        for lineno in added_line_numbers(name):
+            if lineno in executed[name]:
+                reached.append((name, lineno))
+            elif lineno in missing[name]:
+                unexercised.append((name, lineno))
+            elif lineno in excluded[name]:
+                excluded_lines.append((name, lineno))
+            else:
+                silent.append("%s:%d" % (name, lineno))
     return {"profile": profile, "reached": len(reached), "total": len(reached) + len(unexercised),
             "unexercised": ["%s:%d" % pair for pair in unexercised],
-            "unprofiled": unknown}
+            "unmentioned": silent,
+            "excluded": ["%s:%d" % pair for pair in excluded_lines],
+            "unprofiled": unprofiled, "inconsistent": inconsistent}
 
 
 def added_line_numbers(path):
@@ -910,13 +936,30 @@ def render_report(mode, opts, results, examined_total, verdict, reasons, unmatch
     if changed_lines:
         out.append("")
         out.append("== changed lines ==")
-        out.append("profile=%s  reached %d of %d changed lines"
+        out.append("profile=%s  reached %d of %d measured changed lines"
                    % (changed_lines["profile"], changed_lines["reached"], changed_lines["total"]))
         if changed_lines["unexercised"]:
             out.append("unexercised: %s" % ", ".join(changed_lines["unexercised"][:12]))
+        if changed_lines["excluded"]:
+            out.append("excluded by declaration (a pragma or an LCOV_EXCL marker): %s"
+                       % ", ".join(changed_lines["excluded"][:12]))
+        if changed_lines["unmentioned"]:
+            out.append("unmentioned by the report — not covered, not uncovered, not measured: %s"
+                       % ", ".join(changed_lines["unmentioned"][:12]))
+        if changed_lines["unprofiled"]:
+            out.append("unprofiled — file absent from the report: %s"
+                       % ", ".join(changed_lines["unprofiled"][:12]))
+        if changed_lines["inconsistent"]:
+            out.append("report inconsistent — summary and line lists disagree, so its silence "
+                       "means nothing: %s" % ", ".join(changed_lines["inconsistent"][:12]))
         if changed_lines["profile"] == "selected":
             out.append("this profile came from a selected run: it does not support the claim "
                        "that no test executes a line")
+        elif (changed_lines["unmentioned"] or changed_lines["unprofiled"]
+              or changed_lines["inconsistent"]):
+            out.append("this profile is full, but the report does not measure the lines above: "
+                       "it supports neither 'a test reaches this line' nor 'no test executes "
+                       "this line' for them")
     if mutation:
         out.append("")
         out.append("== mutation ==")
@@ -1026,7 +1069,7 @@ def main(argv):
 
     changed_lines = None
     if opts["coverage"]:
-        changed_lines = changed_line_report(opts["coverage"], opts["profile"])
+        changed_lines = changed_line_report(opts["coverage"], opts["profile"], unmatched)
 
     mutation = None
     if mode == "mutation" or opts["mutation"]:

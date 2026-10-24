@@ -1575,7 +1575,7 @@ else
   bad "fixture harness failed (exit $_rc)"
   printf '%s\n' "$_hout" | sed -n 's/^FAIL/  F     /p' | head -12
 fi
-for _needle in "case zero-tests" "case self-oracle" "case control-passes" "case clean-control" "case shared-file" "P-012"; do
+for _needle in "case zero-tests" "case self-oracle" "case control-passes" "case clean-control" "case shared-file" "case coverage-silence" "P-012" "P-013"; do
   if printf '%s\n' "$_hout" | grep -q "ok   $_needle"; then
     ok "harness covered: $_needle"
   else

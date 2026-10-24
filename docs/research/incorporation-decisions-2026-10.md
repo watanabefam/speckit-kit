@@ -288,13 +288,13 @@ unchanged.
    from it. No text change: the stricter rule is the right one, and the record now says where it came
    from. The lesson worth keeping is that "scrubbed" without a verified check means "regex ran", which is
    exactly the claim-versus-evidence distinction 005 exists to enforce.
-3. **`005` FR-033/FR-034 have a gap that source-reading exposed and this pass did not close.** diff_cover's
-   `--expand-coverage-report` exists because a coverage report can **omit a file entirely**; an omitted
-   line is not an uncovered line. 005 says only a full-suite profile may be read as "no test executes this
-   line", which is necessary but not sufficient — a full-suite run with a partial report can still omit
-   lines. 005 is **Accepted**, so the clause is not edited unilaterally. Proposed amendment:
-   *"A line the coverage report does not mention MUST be reported as unknown, never counted as covered or
-   uncovered."* Recorded here so the gap is not lost.
+3. **`005` FR-033/FR-034 had a gap that source-reading exposed.** diff_cover's `--expand-coverage-report`
+   exists because a coverage report can **omit a file entirely**; an omitted line is not an uncovered line.
+   005 said only a full-suite profile may be read as "no test executes this line", which is necessary but not
+   sufficient — a full-suite run with a partial report can still omit lines. **Closed 2026-10-23** by
+   amendment A-005-1 (FR-043, qualified FR-034, extended SC-008, property P-013, task T077,
+   `decisions/0006`), after the formats themselves were read; see *Convergence* below for why the wording
+   changed from "unknown" to a five-state classification.
 4. **Two divergences from upstream defaults are now explicit rather than assumed.** trufflehog's hook mode
    sets `--fail` on **any** finding, not only verified ones (`main.go:930-931`); 005 limits blocking to
    provider-confirmed findings, which is deliberately narrower. And diff_cover requires `git` plus a
@@ -323,3 +323,72 @@ dated archive; reviewdog's `-diff="git diff FETCH_HEAD"`; trufflehog's `Verified
   that it improved their outcomes. The grades say the mechanism exists and behaves as described — no more.
 - **One repo could not be cloned under its remembered name** (`juhasgit/diff_cover` no longer resolves);
   `Bachmann1234/diff_cover` is the live home and is what was read.
+
+---
+
+## Convergence after the amendment (2026-10-23)
+
+Two questions were left open by the pass above. Both were researched to the point where a further source
+stopped changing the answer, then implemented. "Convergence" here means the specific thing: a new source
+either confirmed the mechanism or introduced a third option, and the last three sources did neither.
+
+### 1. What is a coverage report's silence?
+
+The earlier wording ("a line the report does not mention MUST be reported as unknown") was written from
+diff_cover's flag alone. Reading the reporters themselves says the state space is larger, and the first
+implementation was wrong in a way that mattered.
+
+| Source | What it says about a line it does not list | Grade |
+|---|---|---|
+| `coverage.py` `coverage/jsonreport.py` | emits `executed_lines`, `missing_lines`, `excluded_lines` from `analysis.executed/missing/excluded`; these are **statements**, so comments, blanks and lines added after the run are in none of them | `[fetched]` |
+| `coverage.py` `coverage/results.py` | `n_statements = len(statements)`, `n_executed = n_statements - n_missing`; `summary.num_statements` is the report's own completeness claim | `[fetched]` |
+| lcov `geninfo(1)` | `LCOV_EXCL_LINE` / `LCOV_EXCL_START` remove lines from the tracefile; `DA:` records exist only for instrumented lines | `[fetched]` |
+| diff_cover `violations_reporter.py:244-265` | fills each unreported line with **the previous line's hit count** — inference, not measurement | `[fetched]` |
+| `watanabefam/citekit` (`46feeb2`) | an applied repo whose own rule is *"Never state a metric you have not run"*; its README labels an unmeasured latency as such rather than quoting a number | `[read]` |
+
+Two independent report formats (Python's `coverage.py`, C's lcov) agree that a report names what it measured,
+and the only tool found that closes the gap does so by guessing. Convergence: no third option appeared, so
+the specification refuses the guess and names the states — `reached`, `unexercised`, `excluded`, `unmentioned`, `unprofiled`, plus `inconsistent`
+when a report's summary contradicts its own lists (`decisions/0006`, 005 FR-043).
+
+The implementation defect this exposed is worth recording because it was in shipped code: the first version
+classified *anything not in `executed_lines`* as `unexercised`, which is a false claim about every changed
+comment, every excluded line, and every line added after the coverage run. A file absent from the report was
+handled; a line absent from it was not.
+
+### 2. Does the delta invariant belong in 006?
+
+OpenSpec's `openspec-archive-change` skill states that after syncing deltas, no delta-style heading may
+remain in the main spec (read at `56ef0ac`). 006 records amendments (FR-023/FR-024) and archives them by date,
+but says nothing about the *staging* form of an amendment, so a delta's proposal headings could be synced into
+a settled spec and read as ordinary structure. That is a distinct mechanic, not a restatement: 006 says the
+prior version must survive; it did not say the proposal scaffold must not. Adopted as **006 FR-041**,
+acceptance scenario 5.7 and **SC-012**.
+
+### 3. What an applied consumer measures
+
+`watanabefam/citekit` is a real repository built with an older installed copy of this kit (preset `1.11.0`),
+which makes it the first non-self-referential test of the conformance rule added in `decisions/0004`/`0005`:
+
+```
+$ ./scripts/check-section-integrity.sh . spec-template .../citekit/specs/001-web-search-source/spec.md
+  MISSING  ### Which document wins
+  MISSING  ### Parking lot vs Non-Goals
+  FAIL     ... 2 missing, 0 out of order, 0 stubbed (of 27 required)
+```
+
+**25 of 27**, missing two subsections introduced after 1.11.0. This is measured, and it settles a question
+the earlier pass could only speculate about: an adopter who upgrades the kit will fail the conformance rule on
+specifications that were correct when they were written. The baseline mechanism from `0005` is therefore not
+a self-excuse for this repository's history — it is the upgrade path every adopter needs. It also bounds the
+claim the rule can make: presence of structure is checkable, and *when* the structure was required is not,
+so the rule needs a recorded exemption rather than a status check.
+
+### What this convergence did not settle
+
+- citekit's own skill-validation protocol (trigger eval 30/30, metrics scored from `transcript.jsonl` by a
+  different session) is a stronger claim-verification discipline than anything the kit ships for its own
+  skill, whose 60% trigger rate is stated in `AGENTS.md` without a harness. That is a candidate feature, not
+  an implemented one, and it needs its own specification rather than a paragraph here.
+- Nothing in this section measures whether any adopter *acted* on a conformance failure. The citekit run
+  proves the rule fires in a real repository; it does not prove the resulting message is useful.

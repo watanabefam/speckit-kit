@@ -349,6 +349,7 @@ findings are attached to the same report and the same record, so one run produce
 | P-010 | FR-022 | operation | `for any` mutant whose compiled form equals the original, it is labelled equivalent and is not counted as a candidate | property-test | — |
 | P-011 | FR-038 | operation | `for any` killed mutant, its status distinguishes assertion from crash | property-test | — |
 | P-012 | FR-031, FR-032 | operation | `for any` per-task success vector and k, the empirical pass^k and the constant-p bound are both printed, the bound is (mean pass@1)^k, and when finite-sample noise reverses the ordering the report says so instead of asserting an ordering that does not hold | property-test | — |
+| P-013 | FR-043 | operation | `for any` changed set and any partition of its lines into executed / missing / excluded / unmentioned, every changed line lands in exactly one state, silence is never classified as unexercised, and only measured lines enter the denominator | property-test | — |
 | — | FR-001, FR-004, FR-005, FR-014, FR-016, FR-018, FR-019, FR-020, FR-023, FR-024, FR-026, FR-027, FR-028, FR-029, FR-030, FR-036, FR-037, FR-039, FR-040, FR-041, FR-042 | — | — | — | configuration, reporting or prompt-side obligation with no decidable oracle over generated inputs; each is checked by an example-based gate fixture instead (see Validation Strategy) |
 | — | FR-008, FR-009, FR-011, FR-012 (id shape) | — | — | — | covered by P-002 / P-006 and by example fixtures; a separate property would restate them |
 
@@ -447,6 +448,7 @@ own regardless of whether the skill loaded.
 | FR-040 | Documented nightly broad scan (`security observe --all`) | The ladder needs its base |
 | FR-041 | `security changed` uses the same pinned rules | Diff-aware stage |
 | FR-042 | Report prints the environment-only rule as the control and never lets a green scan imply it | The rule a scanner cannot check |
+| FR-043 | Line states from `executed_lines` / `missing_lines` / `excluded_lines`; silence and an absent file are named unmeasured, and `summary.num_statements` is checked against the lists | Silence is not a measurement |
 
 ## Implementation Boundaries
 

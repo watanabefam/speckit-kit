@@ -59,7 +59,13 @@ fallback: select-all: conftest.py changed, so a file-glob selection cannot bound
 specs/005-verification-integrity/spec.md  10/11 evidenced; gaps: SC-004
 
 == changed lines ==
-profile=full  reached 41 of 47 changed lines; 6 unexercised (named below)
+profile=full  reached 41 of 45 measured changed lines
+unexercised: src/pricing.py:88, src/pricing.py:91
+excluded by declaration (a pragma or an LCOV_EXCL marker): src/pricing.py:44
+unmentioned by the report — not covered, not uncovered, not measured: src/pricing.py:12
+unprofiled — file absent from the report: src/legacy.py
+this profile is full, but the report does not measure the lines above: it supports neither
+'a test reaches this line' nor 'no test executes this line' for them
 
 SELF-VERIFY: INCOMPLETE — 1 skipped, 0 failed  (a skip is not a pass)
            record: .specify/ledger.jsonl#2f9c…  examined=19
@@ -68,7 +74,10 @@ SELF-VERIFY: INCOMPLETE — 1 skipped, 0 failed  (a skip is not a pass)
 Rules the output obeys:
 
 - The word `PASS` never appears when anything was skipped, vacuous, unmatched or absent.
-- A changed-line figure always states `profile=`.
+- A changed-line figure always states `profile=`, and its denominator counts only lines the report measured.
+- A line the report does not mention is printed under `unmentioned`, never under `unexercised`; an excluded line is printed as excluded; a file absent from the report is printed as `unprofiled` (FR-043).
+- `unprofiled` names only files the selected checks own: a changed file no check matched is reported once as `unmatched`, not a second time as unmeasured.
+- The stronger reading is refused when the profile is selected **or** when any changed line was unmeasured, because a full profile with silent lines is not a complete measurement either.
 - A mutation percentage, if printed, is labelled `budget` and never `verdict`.
 - The last line always carries `examined=` and the record id, or `record: none — not durable`.
 

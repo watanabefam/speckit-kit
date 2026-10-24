@@ -187,6 +187,7 @@ against the previous version, then confirm the previous version remains readable
 4. **Given** an amendment contradicts an earlier one, **When** both are read, **Then** the contradiction is detectable rather than silently resolved by file order.
 5. **Given** two specifications in the same batch claim the same responsibility, **When** the batch is checked, **Then** the overlap is reported before either is worked.
 6. **Given** a specification that still uses a deprecated or avoided term, **When** the terminology check runs in CI, **Then** it exits nonzero and names the file and the replacement, and it exits 0 once the term is gone.
+7. **Given** a staged delta whose requirements have been synced into the specification, **When** the sync completes, **Then** no delta heading (`ADDED`/`MODIFIED`/`REMOVED`/`RENAMED Requirements`) remains in the main document, and a delta heading found there is reported as an unsynced amendment rather than read as a section.
 
 ---
 
@@ -322,6 +323,7 @@ originally required is the specific thing its source calls the "#1 mistake".
 *Amendments and archive (US5)*
 
 - **FR-040**: Deprecated and avoided terminology MUST be checkable across the specifications, with a nonzero exit in CI.
+- **FR-041**: Applying a delta to a specification MUST leave no delta heading (`ADDED`, `MODIFIED`, `REMOVED`, `RENAMED Requirements`) in that specification, and a delta heading found in a settled specification MUST be detectable as an unsynced amendment rather than accepted as ordinary structure. The delta is a staging form; the applied document carries requirements, not the proposal about them.
 
 ### Key Entities
 
@@ -331,6 +333,7 @@ originally required is the specific thing its source calls the "#1 mistake".
 - **Boundary**: the set of files or areas a task is permitted to touch.
 - **Handoff**: why work stopped, what was uncommitted at that moment, and what the next task is.
 - **Amendment**: additions, changes and removals against a previously settled requirement, with a date.
+- **Delta**: the staged form of an amendment — added, modified, removed and renamed requirements against a settled specification — which is synced into that specification and then has no headings left in it.
 - **Finding**: stage (compliance or quality), file, line, severity, confidence class, how it was established (executed check or reading), and whether the reviewer ran at all.
 - **Decision / Note**: a recorded choice or remark, attached to the work it belongs to.
 
@@ -349,6 +352,7 @@ originally required is the specific thing its source calls the "#1 mistake".
 - **SC-009**: **100%** of recorded completions carry an executed command, its exit code and a nonzero examined count; **zero** completions rest on prose.
 - **SC-010**: **Zero** credential-shaped strings appear in handoff snapshots across the fixture set, and a snapshot that cannot be scrubbed is never pushed.
 - **SC-011**: Every review reports the measured precision of the reviewer it used, or states that it is unmeasured; **zero** reviews are presented as a signal without it.
+- **SC-012**: **Zero** settled specifications retain a delta heading after a sync, and every unsynced delta is reported as one rather than read as ordinary section structure.
 
 ## Out of Scope
 

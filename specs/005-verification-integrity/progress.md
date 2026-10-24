@@ -79,6 +79,7 @@ Task 73: complete (the CI matrix already runs the gate on macOS bash 3.2 and Lin
 Task 74: complete (quickstart scenarios: the engine, ledger, mutation and pass^k ones run in the harness; the scanner scenarios need absent tools, so they are NOT-RUN rather than claimed. The research companion's claims were checked in docs/research/spec-vs-research-check-2026-10-22.md ([SC-007]))
 Task 75: complete (`SELF-GATE: PASS  examined=N assertion(s)`; N > 0, and a run that asserts nothing fails (FR-001))
 Task 76: complete (this file; `bin/speckit-resume specs/005-verification-integrity` prints COMPLETE only when every task has a line)
+Task 77: complete (amendment FR-043: `harness.py --case coverage-silence` and `--property P-013` pass; both fail against an engine that classifies silence as unexercised, checked by reverting that one branch ([SC-008]))
 
 ## Not claimed
 
@@ -123,6 +124,24 @@ That amendment has run (`decisions/0004`). All six specs now pass — 27/27 head
 non-empty — and `scripts/self-gate.sh` asserts it over every `specs/*/spec.md`, so the next drift is a
 gate failure rather than a silent omission. The checker also gained stub detection and fence awareness;
 the second was a defect that had previously been worked around by editing a template.
+
+## Amendment A-005-1 — silence in a coverage report is not a result (2026-10-23)
+
+The gap recorded in the section below was closed by amendment rather than left as a note. The owner
+authorised it in the same turn the source re-verification closed; the change is FR-043 (new), a qualified
+FR-034, an extended SC-008, one plan property (P-013) and one task (T077). `decisions/0006` carries the
+sources and the rejected alternative.
+
+What changed in the engine: `changed_line_report` now reads `missing_lines` and `excluded_lines` as separate
+states instead of treating "not in `executed_lines`" as unexercised, and it checks each file's
+`summary.num_statements` against its own line lists. A changed line is now reached, unexercised, excluded,
+unmentioned or unprofiled — five states, of which only the first two are measurements, and only those two
+enter the denominator. A full profile with any unmeasured line now prints that it supports neither reading,
+which is the clause the earlier note asked for.
+
+Evidence: `case coverage-silence` and `P-013` (six generated partitions). The negative control is not a
+claim: reverting the branch that classifies silence → `unexercised` makes both fail ("a listed-missing line
+was not reported unexercised"), and restoring it makes both pass.
 
 ## Coverage gap found at source, recorded rather than patched (2026-10-23)
 

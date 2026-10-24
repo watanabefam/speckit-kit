@@ -7,6 +7,26 @@ The preset version lives in `preset/preset.yml` and is what `specify preset info
 
 ## [Unreleased]
 
+### Changed — a coverage report's silence is unmeasured, not uncovered
+
+`scripts/verify --coverage` classified every changed line it could not find in `executed_lines` as
+`unexercised`. coverage.py's arrays hold **statements** and list exclusions separately, so that classified
+comments, `# pragma: no cover` lines and lines added after the coverage run as "no test executes this" — a
+claim the report does not make. Three states became five:
+
+- **reached** and **unexercised** are measurements and the only lines in the denominator;
+- **excluded** (a pragma or an `LCOV_EXCL_*` marker) is named, never counted as covered;
+- **unmentioned** (the report is silent) and **unprofiled** (the file is absent) are named unmeasured;
+- a report whose `summary.num_statements` contradicts its own line lists is reported as **inconsistent**
+  rather than read line by line.
+
+The figure now reads `reached N of M measured changed lines`, and a full profile with any unmeasured line no
+longer supports either reading — only a line the report lists as missing supports "no test executes this".
+Spec `005` FR-043 (new), FR-034 (qualified), SC-008 (extended), plan property P-013, task T077;
+`decisions/0006` carries the sources and the rejected alternative (diff_cover infers a neighbour's hit count,
+which is a guess with no provenance). `006` gains FR-041/SC-012: an applied delta must leave no delta heading
+in the settled specification, so a proposal's scaffolding is never read as structure.
+
 ### Changed — the peer sweep is re-verified at source, and one requirement was wrong
 
 Every repo in `docs/research/incorporation-decisions-2026-10.md` was cloned and each adopted or rejected
@@ -24,9 +44,9 @@ READMEs, which is the failure mode that document exists to criticise.
   recorded as ours.
 - **SpecWeave's `review` exit 3** also fires when no verdict was returned, which is why a finding must
   record how it was established rather than lean on an absent verdict.
-- **A gap in `005` is recorded, not patched**: diff_cover's `--expand-coverage-report` exists because a
-  coverage report can omit a file entirely, and an omitted line is not an uncovered one. FR-033/FR-034 do
-  not yet say so; the proposed clause is in the research record because `005` is Accepted.
+- **A gap in `005` was found and then closed** (next entry): diff_cover's `--expand-coverage-report` exists
+  because a coverage report can omit a file entirely, and an omitted line is not an uncovered one. Reading the
+  reporters turned one clause into five line states — FR-043.
 - Minor factual corrections: SpecWeave's auto-handoff threshold is a percentage of a **usage window** (with
   `suggest`/`enforce`/`checkpoint` modes); OpenSpec has no `/opsx:archive` (it is the
   `openspec-archive-change` skill, and it also asserts no delta headings remain after syncing); agent-os's

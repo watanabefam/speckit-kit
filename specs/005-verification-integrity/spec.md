@@ -12,7 +12,7 @@
 
 **Workflow:** full spec-driven · **Companion:** `docs/research/verification-tooling-2026-10.md` (informative; five validation rounds, §10 and §11 authoritative, §12 the corrections made after the independent check)
 **Normative sections:** User Scenarios & Testing, Requirements, Success Criteria.
-**Revised**: 2026-10-22 after `docs/research/spec-vs-research-check-2026-10-22.md` (findings C-01, H-01…H-03, M-01…M-08, L-01…L-05).
+**Revised**: 2026-10-22 after `docs/research/spec-vs-research-check-2026-10-22.md` (findings C-01, H-01…H-03, M-01…M-08, L-01…L-05). **Amended 2026-10-23** (owner-approved): FR-034 qualified and FR-043 added — a coverage report's silence is unmeasured, not uncovered (`decisions/0006-coverage-silence-is-not-a-result.md`).
 **Relationship to 004:** `004-reliability-hardening` repaired the *kit's own* gate (its recursion, its skips, its ledger trust). This feature addresses a different subject: whether a verification report means anything — first at the kit's own `./scripts/verify`, then at any **downstream project's**. Where the two overlap, 004's three-state verdict (`scripts/self-gate.sh:1477-1490`) is the precedent to copy, not to change.
 
 ## Normative Status
@@ -259,7 +259,7 @@ existing stories instead of adding a ninth. Source: `docs/research/incorporation
 *Change-scoped verification (US4)*
 
 - **FR-033**: A run MUST report how many changed lines the executed tests reached and how many they did not, and MUST state which coverage profile the figure came from.
-- **FR-034**: A changed-line result MUST NOT be presented as coverage of the file, the module, or the project, and a selected-run result MUST NOT be presented as "no test executes this line" — only a full-suite profile supports that reading.
+- **FR-034**: A changed-line result MUST NOT be presented as coverage of the file, the module, or the project, and a selected-run result MUST NOT be presented as "no test executes this line" — only a full-suite profile supports that reading, and only for a line the report lists as missing. For a line the report does not mention at all, neither "a test reaches this line" nor "no test executes this line" is supported by any profile.
 
 *Security ladder (US6)*
 
@@ -287,6 +287,17 @@ adopted. They sharpen existing stories rather than adding a ninth.
 - **FR-041**: A change-scoped (diff-aware) scan MUST exist and MUST use the same pinned rule set as the broad scan.
 - **FR-042**: The environment-only credential rule MUST be reported as the control for hand-written credentials, and a green scan MUST NOT be reported as satisfying it.
 
+### Requirement added by the coverage-source re-verification (2026-10-23)
+
+Source: `docs/research/incorporation-decisions-2026-10.md` §"Re-verification at source level", extended by
+re-reading the report formats themselves (`coverage.py`'s `jsonreport.py`, lcov's exclusion markers,
+diff_cover's `--expand-coverage-report`). A coverage report names what it measured and is silent about the
+rest; that silence is not a result. Recorded as `decisions/0006`.
+
+*Change-scoped verification (US4)*
+
+- **FR-043**: A changed line the coverage report does not mention MUST be reported as unmeasured and counted neither as reached nor as unexercised; a line the report lists as excluded MUST be named as excluded and MUST NOT be counted as covered; a file absent from the report MUST be named, not counted; and a report whose own summary contradicts its line lists MUST be reported as unreliable rather than read line by line. An unmeasured line MUST NOT enter the denominator of the changed-line figure.
+
 ### Key Entities
 
 - **Verification Result**: one immutable record — identifier, timestamp, what ran, exit code, fingerprint, examined-count, verdict (`PASS`/`FAIL`/`INCOMPLETE`/`NOT-RUN`).
@@ -306,7 +317,7 @@ adopted. They sharpen existing stories rather than adding a ninth.
 - **SC-005**: The blocking security stage is enabled only after a scheduled broad scan has recorded a per-rule baseline, and never for a rule class whose measured false-positive baseline has not been recorded, nor for a finding no provider confirmed live.
 - **SC-006**: Reliability reporting shows both figures on every run; a deterministic task set yields them **equal**.
 - **SC-007**: Every claim in this feature's evidence trail is either a citation or a measurement reproducible with a recorded command — **zero** unsourced assertions in the research companion.
-- **SC-008**: **100%** of changed-line reports state the coverage profile they came from; a full-suite profile whose new lines no test executes is reported as unexercised, and a selected-run profile never yields the claim that no test executes a line.
+- **SC-008**: **100%** of changed-line reports state the coverage profile they came from; a full-suite profile whose new lines no test executes is reported as unexercised, and a selected-run profile never yields the claim that no test executes a line. Every changed line the report does not mention is reported as unmeasured and enters neither the numerator nor the denominator — **zero** reports count silence as uncovered, and **zero** reports count an excluded line as covered.
 - **SC-009**: **Zero** pattern-only credential matches are labelled confirmed across the full fixture set, and no green scan is reported as satisfying the environment-only credential rule.
 - **SC-010**: Every killed mutant in a report carries a kill status, and **zero** crash-killed mutants are counted as evidence that a test would notice the change.
 - **SC-011**: A reader can tell from the report alone whether a mutant count came from the extreme mode; **zero** extreme-mode results are presented as interchangeable with an operator-level run of the same tasks.

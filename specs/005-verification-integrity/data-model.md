@@ -67,9 +67,24 @@ rules is not a baseline (FR-026).
 
 ### 4. Coverage profile — path named in the manifest
 
-Unmodified `coverage.py` JSON (`files[].executed_lines`, `files[].missing_lines`). The engine reads it and never
-writes it. Its provenance is not a property of the file, so `--coverage` takes an explicit `--profile full|selected`
-flag; guessing would be the defect.
+Unmodified `coverage.py` JSON (`files[].executed_lines`, `files[].missing_lines`, `files[].excluded_lines`,
+`files[].summary.num_statements`). The engine reads it and never writes it. Its provenance is not a property of the
+file, so `--coverage` takes an explicit `--profile full|selected` flag; guessing would be the defect.
+
+A changed line falls into exactly one of five states, and only the first two are measurements of the change:
+
+| State | Source | Counted as |
+|---|---|---|
+| **reached** | in `executed_lines` | measured, numerator |
+| **unexercised** | in `missing_lines` | measured, denominator |
+| **excluded** | in `excluded_lines` (a `# pragma: no cover` or `LCOV_EXCL_LINE`) | named, never measured — an exclusion is a declaration, not a result |
+| **unmentioned** | in none of the three lists | named as unmeasured, in neither numerator nor denominator |
+| **unprofiled** | the whole file is absent from `files[]` (and a check owns it — an unowned file is `unmatched`, reported elsewhere) | named, in neither |
+
+The arrays hold **statements**, not every source line, so silence is the normal state of a comment and the defect
+state of a stale report — the engine cannot tell them apart and MUST NOT guess (FR-043). `summary.num_statements`
+is the report's own claim about its completeness: when it disagrees with `len(executed)+len(missing)` for a file,
+the report contradicts itself and that file's lines are unmeasured rather than classified.
 
 ## In-memory aggregates
 

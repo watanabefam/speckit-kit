@@ -262,6 +262,7 @@ Single project at the repository root, per the plan's Structure Decision: `bin/`
 - [ ] T074 Run `quickstart.md`'s twelve scenarios end to end and record which pass, which need a tool that is absent, and which are `NOT-RUN`. → verify: a written result per scenario in `progress.md`
 - [ ] T075 Run `./scripts/verify` and `bash scripts/check-section-integrity.sh` on the finished tree; confirm the verdict prints an examined count (FR-001 satisfied at the kit's own gate). → verify: gate green with `examined=N` in the verdict block, `N > 0`
 - [ ] T076 Open `specs/005-verification-integrity/progress.md` with the identity line and write one `Task N: complete (<evidence>)` line per task as it closes. → verify: `bin/speckit-resume specs/005-verification-integrity` prints `COMPLETE` only when every task has a line
+- [ ] T077 [P] Add the amendment's states to `bin/speckit-verify`: a changed line the report never mentions is `unmentioned` (never `unexercised`), an excluded line is named excluded, a file absent from the report is `unprofiled`, and a report whose summary contradicts its line lists is `inconsistent`; none of the four enters the denominator. → verify: `harness.py --case coverage-silence` and `--property P-013` pass, and both fail against an engine that classifies silence as unexercised (FR-043, SC-008)
 
 ---
 
@@ -607,6 +608,7 @@ unbuilt, and a property-test task with no P-ID is scope creep.
 | FR-040 | — (scheduled scan, documented + fixture) | T053 | ☐ |
 | FR-041 | — (diff-aware stage, example fixture) | T058 | ☐ |
 | FR-042 | — (report text, SC-009 fixture) | T059 | ☐ |
+| FR-043 | P-013 | T077 | ☐ |
 
 **Property coverage**
 
@@ -624,5 +626,6 @@ unbuilt, and a property-test task with no P-ID is scope creep.
 | P-010 | FR-022 | T042 | property-test |
 | P-011 | FR-038 | T043 | property-test |
 | P-012 | FR-031, FR-032 | T067 | property-test |
+| P-013 | FR-043 | T077 | property-test |
 
 Every property task uses the plan's **fallback** decision: an example-based fixture plus a small stdlib generator, never a third-party property framework.

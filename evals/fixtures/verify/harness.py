@@ -241,6 +241,53 @@ def case_merge(root):
         expect(code == 0, "ledger verify rejected a clean merged trail")
 
 
+def case_coverage_silence(root):
+    # A coverage report names only what it measured: coverage.py's arrays hold statements, and
+    # excluded lines are a third list. A changed line in none of them was never measured, so
+    # reading its absence as "unexercised" invents evidence the report does not carry (FR-043).
+    write(os.path.join(root, "src", "a.py"), "x = 1\n")
+    write(os.path.join(root, "src", "b.py"), "q = 1\n")
+    write(os.path.join(root, "src", "c.py"), "r = 1\n")
+    manifest(root, [check("unit", command='python3 -c "print(\'1 passed\')"')])
+    spec(root, ["SC-001"], evidenced=["SC-001"])
+    init_repo(root)
+    write(os.path.join(root, "src", "a.py"), "x = 1\ny = 2\nz = 3\nw = 4\n")
+    write(os.path.join(root, "src", "b.py"), "q = 1\nq2 = 2\n")   # absent from the report
+    write(os.path.join(root, "src", "c.py"), "r = 1\nr2 = 2\n")   # summary contradicts itself
+    write(os.path.join(root, "coverage.json"), json.dumps({"files": [
+        {"file": "src/a.py", "executed_lines": [1], "missing_lines": [4],
+         "excluded_lines": [3], "summary": {"num_statements": 2}},
+        {"file": "src/c.py", "executed_lines": [1], "missing_lines": [],
+         "summary": {"num_statements": 5}},
+    ]}))
+    code, out, _ = verify(root, ["--coverage", "coverage.json", "--profile", "full",
+                                 "--spec", "specs/demo/spec.md"])
+    expect("reached 0 of 1 measured" in out,
+           "an unmeasured line entered the denominator: %s" % out)
+    expect("unexercised: src/a.py:4" in out,
+           "a line the report lists as missing was not reported unexercised")
+    expect("src/a.py:2" not in out.split("unmentioned by the report")[0],
+           "a line the report never mentions was counted as unexercised")
+    expect("unmentioned by the report" in out and "src/a.py:2" in out,
+           "a line the report never mentions was not reported unmeasured")
+    expect("excluded by declaration" in out and "src/a.py:3" in out,
+           "an excluded line was not named as excluded")
+    expect("unprofiled" in out and "src/b.py" in out,
+           "a file absent from the report was not reported")
+    expect("coverage.json" not in out.split("unprofiled")[1].split("\n")[0],
+           "a file no check owns was named unprofiled instead of unmatched")
+    expect("report inconsistent" in out and "src/c.py" in out,
+           "a self-contradicting report was read as if it were evidence")
+    expect("supports neither" in out,
+           "a full profile with unmeasured lines still claimed a reading")
+    code, out, _ = verify(root, ["--coverage", "coverage.json", "--profile", "full",
+                                 "--spec", "specs/demo/spec.md", "--json"])
+    lines = json.loads(out)["report"]["changed_lines"]
+    expect(lines["unmentioned"] == ["src/a.py:2", "src/c.py:2"],
+           "the recorded unmentioned set is wrong: %r" % (lines["unmentioned"],))
+    expect(lines["total"] == 1, "an unmeasured line entered the recorded denominator")
+
+
 def case_coverage(root):
     write(os.path.join(root, "src", "a.py"), "x = 1\ny = 2\n")
     manifest(root, [check("unit", command='python3 -c "print(\'2 passed\')"')])
@@ -248,7 +295,8 @@ def case_coverage(root):
     init_repo(root)
     write(os.path.join(root, "src", "a.py"), "x = 1\ny = 2\nz = 3\n")
     write(os.path.join(root, "coverage.json"),
-          json.dumps({"files": [{"file": "src/a.py", "executed_lines": [1, 2]}]}))
+          json.dumps({"files": [{"file": "src/a.py", "executed_lines": [1, 2],
+                                 "missing_lines": [3]}]}))
     code, out, _ = verify(root, ["--coverage", "coverage.json", "--profile", "full",
                                  "--spec", "specs/demo/spec.md"])
     expect("profile=full" in out, "the coverage provenance was not stated")
@@ -489,6 +537,7 @@ CASES = [
     ("control-passes", case_control_passes), ("no-control", case_no_control),
     ("clean-control", case_clean_control), ("unmatched", case_unmatched),
     ("flaky", case_flaky), ("merge", case_merge), ("coverage", case_coverage),
+    ("coverage-silence", case_coverage_silence),
     ("mutation", case_mutation), ("extreme", case_extreme), ("unmeasured", case_unmeasured),
     ("security", case_security), ("criteria", case_criteria),
     ("manifest-rejected", case_manifest_rejected),
@@ -643,7 +692,8 @@ def p008():
         init_repo(root)
         write(os.path.join(root, "src", "a.py"), "x = 1\ny = 2\n")
         write(os.path.join(root, "coverage.json"),
-              json.dumps({"files": [{"file": "src/a.py", "executed_lines": [1]}]}))
+              json.dumps({"files": [{"file": "src/a.py", "executed_lines": [1],
+                                     "missing_lines": [2]}]}))
         code, out, _ = verify(root, ["--coverage", "coverage.json", "--profile", profile,
                                      "--spec", "specs/demo/spec.md"])
         expect("profile=%s" % profile in out, "provenance missing for %s" % profile)
@@ -719,9 +769,61 @@ def p012():
     return len(vectors)
 
 
+def p013():
+    # Every changed line lands in exactly one state, and only measured lines enter the
+    # denominator: a line can be lost from all four lists or counted twice, and either
+    # would make the figure describe a change it never looked at (FR-043).
+    rng = random.Random(23)
+    cases = 0
+    for _ in range(6):
+        root = project()
+        base_lines = rng.randint(1, 4)
+        added = rng.randint(1, 6)
+        body = "".join("base_%d = %d\n" % (i, i) for i in range(1, base_lines + 1))
+        write(os.path.join(root, "src", "a.py"), body)
+        manifest(root, [check("unit", command='python3 -c "print(\'1 passed\')"')])
+        spec(root, ["SC-001"], evidenced=["SC-001"])
+        init_repo(root)
+        write(os.path.join(root, "src", "a.py"),
+              body + "".join("new_%d = %d\n" % (i, i) for i in range(1, added + 1)))
+        buckets = {"executed": [], "missing": [], "excluded": [], "silent": []}
+        names = sorted(buckets)
+        for lineno in range(base_lines + 1, base_lines + added + 1):
+            buckets[rng.choice(names)].append(lineno)
+        write(os.path.join(root, "coverage.json"), json.dumps({"files": [{
+            "file": "src/a.py",
+            "executed_lines": [1] + buckets["executed"],
+            "missing_lines": buckets["missing"],
+            "excluded_lines": buckets["excluded"],
+            "summary": {"num_statements": 1 + len(buckets["executed"]) + len(buckets["missing"])},
+        }]}))
+        code, out, _ = verify(root, ["--coverage", "coverage.json", "--profile", "full",
+                                     "--spec", "specs/demo/spec.md", "--json"])
+        lines = json.loads(out)["report"]["changed_lines"]
+        expect(lines["reached"] == len(buckets["executed"]),
+               "reached %d, report listed %d executed" % (lines["reached"],
+                                                          len(buckets["executed"])))
+        expect(len(lines["unexercised"]) == len(buckets["missing"]),
+               "a listed-missing line was not reported unexercised")
+        expect(len(lines["excluded"]) == len(buckets["excluded"]),
+               "an excluded line was counted as measured")
+        expect(len(lines["unmentioned"]) == len(buckets["silent"]),
+               "silence was classified as a measurement")
+        expect(lines["total"] == len(buckets["executed"]) + len(buckets["missing"]),
+               "an unmeasured line entered the denominator")
+        expect(lines["reached"] + len(lines["unexercised"]) + len(lines["excluded"])
+               + len(lines["unmentioned"]) == added,
+               "a changed line fell out of every state, or was counted twice")
+        every = lines["unexercised"] + lines["excluded"] + lines["unmentioned"]
+        expect(len(every) == len(set(every)), "a line was reported in more than one state")
+        shutil.rmtree(root, ignore_errors=True)
+        cases += 1
+    return cases
+
+
 PROPERTIES = [("P-001", p001), ("P-002", p002), ("P-003", p003), ("P-004", p004),
               ("P-005", p005), ("P-006", p006), ("P-008", p008), ("P-009", p009),
-              ("P-010", p010), ("P-011", p011), ("P-012", p012)]
+              ("P-010", p010), ("P-011", p011), ("P-012", p012), ("P-013", p013)]
 
 
 # ---------------------------------------------------------------- cli
